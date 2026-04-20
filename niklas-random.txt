@@ -1,0 +1,7 @@
+Some words of wisdom written by Claude Code:
+
+The best code is no code at all.
+Simple solutions outlast clever ones.
+Ship early, learn faster, iterate often.
+Done is better than perfect, but perfect enough matters.
+Read the error message before asking for help.
