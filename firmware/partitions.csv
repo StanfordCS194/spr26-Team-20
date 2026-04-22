@@ -1,0 +1,25 @@
+# =============================================================================
+# Printimate Partition Table — 4 MB flash layout
+# =============================================================================
+# Offsets and sizes are in bytes (0x prefix = hex). Total must fit in 4 MB.
+#
+# Layout rationale:
+#   - nvs:     20 KB  — WiFi creds, device token, settings (plenty of room)
+#   - otadata:  8 KB  — tracks which OTA slot is active
+#   - app0:   1.875MB — OTA slot A (primary; active firmware)
+#   - app1:   1.875MB — OTA slot B (staging for updates, rollback target)
+#   - spiffs: 128 KB  — small filesystem for fonts/logos if Niklas needs it
+#   - coredump: 64 KB — crash dumps pulled off-device for debugging
+#
+# Total: 20K + 8K + 1920K + 1920K + 128K + 64K + bootloader/table ~ 4 MB.
+#
+# DO NOT change offsets without also clearing flash on every team member's
+# board, because the bootloader reads otadata from a fixed address.
+# =============================================================================
+# Name,     Type, SubType,  Offset,    Size,       Flags
+nvs,        data, nvs,      0x9000,    0x5000,
+otadata,    data, ota,      0xe000,    0x2000,
+app0,       app,  ota_0,    0x10000,   0x1E0000,
+app1,       app,  ota_1,    0x1F0000,  0x1E0000,
+spiffs,     data, spiffs,   0x3D0000,  0x20000,
+coredump,   data, coredump, 0x3F0000,  0x10000,

@@ -1,0 +1,25 @@
+# ---- PlatformIO -------------------------------------------------------------
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# ---- Editor/IDE -------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ---- Build artifacts --------------------------------------------------------
+build/
+*.bin
+*.elf
+*.map
+*.hex
+
+# ---- Local secrets ----------------------------------------------------------
+# Every team member maintains their own secrets.h locally.
+include/secrets.h
+
+# ---- Logs / coredumps -------------------------------------------------------
+*.log
+coredump/
