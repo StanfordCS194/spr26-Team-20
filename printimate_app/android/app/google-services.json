@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "371888079966",
+    "project_id": "printimate-44033",
+    "storage_bucket": "printimate-44033.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:371888079966:android:d9c82121064eaf227460cf",
+        "android_client_info": {
+          "package_name": "com.printimate.printimate_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "371888079966-35n1e8861dn1pvm80c1jndr3jm7n3nke.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.printimate.printimate_app",
+            "certificate_hash": "3fffacacc5994f8809f357564fce62c4d02b7f89"
+          }
+        },
+        {
+          "client_id": "371888079966-rhmsegle7lhe4lrh5oq6v8v2misohs5q.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKuDP0dJ2miTDr_hNC_oOHKSVgVMYeI4A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "371888079966-rhmsegle7lhe4lrh5oq6v8v2misohs5q.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "371888079966-jk2qo3j7rp16261uulo8lht6uvsb75ml.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.printimate.printimateApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

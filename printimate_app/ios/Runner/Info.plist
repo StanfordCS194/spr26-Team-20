@@ -76,5 +76,16 @@
 	<string>Printimate accesses your photo library so you can send pictures to loved ones.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Printimate can talk to your printer over your local WiFi network.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.371888079966-jk2qo3j7rp16261uulo8lht6uvsb75ml</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
