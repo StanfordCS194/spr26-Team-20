@@ -72,11 +72,9 @@ void loop() {
             break;
 
         case BootState::CheckCredentials: {
-            Preferences prefs;
-            prefs.begin(PRINTIMATE_NVS_NAMESPACE, /*readOnly=*/true);
-            bool hasCreds = prefs.isKey(PRINTIMATE_NVS_KEY_SSID) &&
-                            prefs.isKey(PRINTIMATE_NVS_KEY_PASS);
-            prefs.end();
+            // WiFiProv stores Wi-Fi credentials in the IDF's own NVS namespace.
+            // Ask the provisioning module rather than reading NVS directly.
+            bool hasCreds = provisioning_hasStoredCredentials();
             transitionTo(hasCreds ? BootState::ConnectingWifi
                                   : BootState::Provisioning);
             break;
@@ -103,14 +101,12 @@ void loop() {
                     PRINTIMATE_LOG_W("WiFi creds look stale, falling back to provisioning");
                     transitionTo(BootState::Provisioning);
                 } else {
-                    Preferences prefs;
-                    prefs.begin(PRINTIMATE_NVS_NAMESPACE, /*readOnly=*/true);
-                    String ssid = prefs.getString(PRINTIMATE_NVS_KEY_SSID, "");
-                    String pass = prefs.getString(PRINTIMATE_NVS_KEY_PASS, "");
-                    prefs.end();
-                    PRINTIMATE_LOG_I("WiFi connect attempt %d to '%s'",
-                                     g_wifiRetryCount + 1, ssid.c_str());
-                    WiFi.begin(ssid.c_str(), pass.c_str());
+                    PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
+                                     g_wifiRetryCount + 1);
+                    // No SSID/password args: WiFi.begin() without arguments
+                    // pulls credentials from the IDF's NVS, where WiFiProv
+                    // stored them during provisioning.
+                    WiFi.begin();
                     g_wifiRetryCount++;
                     g_lastRetryMs = millis();
                 }
@@ -199,11 +195,8 @@ static void checkResetButton() {
         if (g_buttonDownSinceMs == 0) {
             g_buttonDownSinceMs = millis();
         } else if (millis() - g_buttonDownSinceMs >= PRINTIMATE_RESET_HOLD_MS) {
-            PRINTIMATE_LOG_W("Reset button held; wiping NVS and rebooting");
-            Preferences prefs;
-            prefs.begin(PRINTIMATE_NVS_NAMESPACE, /*readOnly=*/false);
-            prefs.clear();
-            prefs.end();
+            PRINTIMATE_LOG_W("Reset button held; factory reset and reboot");
+            provisioning_factoryReset();   // wipes both our NVS and WiFiProv's
             delay(200);
             ESP.restart();
         }
