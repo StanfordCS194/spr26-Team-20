@@ -6,11 +6,14 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 
+import '../../app/config.dart';
 import '../../app/theme.dart';
 import '../profile/profile_repository.dart';
 import 'drawing_canvas.dart';
@@ -161,64 +164,26 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       _error = null;
     });
     try {
-      Uint8List rawForPipeline;
-      String sourceLabel;
-
-      switch (_source) {
-        case _Source.text:
-          final text = _messageCtl.text.trim();
-          if (text.isEmpty) {
-            setState(() => _error = 'Type a message first.');
-            return;
-          }
-          setState(() => _sendStatus = 'RENDERING TEXT...');
-          rawForPipeline = await _renderTextToPng(text);
-          sourceLabel = 'text';
-          break;
-        case _Source.photo:
-          if (_selectedRawBytes == null) {
-            setState(() => _error = 'Attach an image first.');
-            return;
-          }
-          rawForPipeline = _selectedRawBytes!;
-          sourceLabel = 'photo';
-          break;
-        case _Source.draw:
-          if (_drawingController.isEmpty) {
-            setState(() => _error = 'Draw something first.');
-            return;
-          }
-          final drawing = await _captureDrawingRaw();
-          if (drawing == null) {
-            setState(() => _error = 'Could not capture drawing.');
-            return;
-          }
-          rawForPipeline = drawing;
-          sourceLabel = 'drawing';
-          break;
-      }
-
-      setState(() => _sendStatus = 'PROCESSING IMAGE...');
-      final processed = await _processForReceiptPrinter(rawForPipeline);
-
-      setState(() => _sendStatus = 'UPLOADING...');
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final storageRef = ref
-          .read(firebaseStorageProvider)
-          .ref('messages/$uid/$timestamp.png');
-      await storageRef.putData(
-        processed.pngBytes,
-        SettableMetadata(
-          contentType: 'image/png',
-          customMetadata: {
-            'senderUid': uid,
-            'createdAtMs': '$timestamp',
-            'source': sourceLabel,
-            'widthPx': '${processed.width}',
-            'heightPx': '${processed.height}',
-          },
-        ),
+      // TODO: write to Firestore once the endpoint is provided.
+      // Example shape (subject to change):
+      // await FirebaseFirestore.instance.collection('messages').add({
+      //   'senderUid': FirebaseAuth.instance.currentUser!.uid,
+      //   'body': text,
+      //   'imageBase64': _base64Image,         // 1-bit PNG, FS-dithered
+      //   'imageWidth': _printerWidthPx,
+      //   'createdAt': FieldValue.serverTimestamp(),
+      //   'status': 'queued',
+      // });
+      final response = await http.post(
+        Uri.parse('${Config.serverBaseUrl}/send').replace(queryParameters: {
+        'pid': Config.printerId, // Get from pairing/config
+      }),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+        'uid': 'current-user-id', // Get from auth
+        'message': text,
+        // Optional: add imageBase64 if needed
+        }),
       );
 
       setState(() => _sendStatus = 'SENDING TO SERVER...');

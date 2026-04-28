@@ -18,15 +18,42 @@ const db = getFirestore(adminApp);
 const app = express();
 const port = 3000;
 app.use(express.json());
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(204);
+        return;
+    }
+    next();
+});
 var messages = {};
 app.post("/send", (req, res) => {
     const pid = req.query.pid;
-    const body = req.body;
-    console.log(`Received request to send message to pid ${pid} with body:`, body);
-    if (!pid || !body.messageText || !body.authorUid) {
-        res
-            .status(400)
-            .send("Missing required fields: pid, authorUid, messageText");
+    const message = req.body.message;
+    const uid = req.body.uid;
+    const newMessage = {
+        id: uid,
+        message: message,
+        timestamp: new Date(),
+        status: 'pending'
+    };
+    if (messages[pid]) {
+        messages[pid].push(newMessage);
+    }
+    else {
+        messages[pid] = [newMessage];
+    }
+    console.log(`Received message for pid ${pid}: ${message}`);
+    res.status(201);
+});
+//GET messages route
+app.get('/messages', (req, res) => {
+    const pid = req.query.pid;
+    const message = messages[pid];
+    if (message == undefined) {
+        res.status(404).send('Message not found');
         return;
     }
     const newMessage = {
