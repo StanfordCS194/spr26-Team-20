@@ -17,13 +17,14 @@
 // ---- Serial -----------------------------------------------------------------
 #define PRINTIMATE_SERIAL_BAUD 115200
 
-// ---- Provisioning (SoftAP mode) --------------------------------------------
-// AP SSID is constructed at runtime as "Printimate-Setup-XXXX" where XXXX is
-// the last 4 hex digits of the MAC. See provisioning.cpp.
-#define PRINTIMATE_AP_PASSWORD_LEN   10        // length of generated AP password
-#define PRINTIMATE_AP_CHANNEL        6
-#define PRINTIMATE_AP_MAX_CLIENTS    2
-#define PRINTIMATE_HTTP_PORT         80
+// ---- Provisioning (BLE mode, via Espressif WiFiProv) -----------------------
+// BLE service name is built at runtime as "PROV_XXXX" from the last 2 MAC
+// bytes (matches Espressif convention; recognized by reference apps).
+//
+// PoP = "proof of possession" — the device-specific shared secret the phone
+// must present during the SRP handshake. Per-device, generated at first
+// boot, persisted in NVS, printed on the receipt + as a QR code.
+#define PRINTIMATE_POP_LEN           8
 
 // ---- WiFi connection retry/backoff -----------------------------------------
 #define PRINTIMATE_WIFI_MAX_RETRIES      5
@@ -40,9 +41,11 @@
 #define PRINTIMATE_NVS_NAMESPACE    "printimate"
 
 // NVS keys. Keep names <= 15 chars (NVS limit).
-#define PRINTIMATE_NVS_KEY_SSID     "wifi_ssid"
-#define PRINTIMATE_NVS_KEY_PASS     "wifi_pass"
-#define PRINTIMATE_NVS_KEY_TOKEN    "dev_token"
+// Note: Wi-Fi SSID/password are stored by WiFiProv in the IDF's own NVS
+// namespace (`nvs.net80211`), not under our namespace. We only store
+// our own metadata (PoP, device token, settings) here.
+#define PRINTIMATE_NVS_KEY_POP       "ble_pop"
+#define PRINTIMATE_NVS_KEY_TOKEN     "dev_token"
 
 // ---- Message limits ---------------------------------------------------------
 // Enforced at firmware boundary; the backend should enforce these too so we

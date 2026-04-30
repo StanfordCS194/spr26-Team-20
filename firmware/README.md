@@ -28,6 +28,25 @@ ESP32 firmware for the Printimate thermal printer. Runs on an **ESP32 DevKit V1*
    ```
    Fill in values for your dev environment. **Do not commit `secrets.h`.**
 
+## Provisioning model
+
+We use **BLE Wi-Fi provisioning** via Espressif's `WiFiProv` library, talked to
+from the Flutter app via the `esp_provisioning_ble` package. See
+`docs/adr-001-ble-prov.md` for the decision rationale.
+
+What this means in practice:
+
+- On first boot (or after factory reset), the device advertises over BLE as
+  `PROV_XXXX` (where `XXXX` is the last 2 MAC bytes).
+- The app discovers it, performs an SRP6a handshake using a per-device
+  **proof of possession (PoP)** — an 8-character code shown on the printed
+  QR receipt — and pushes Wi-Fi credentials over an encrypted GATT channel.
+- Credentials are persisted by `WiFiProv` in the IDF's own NVS namespace
+  (`nvs.net80211`); on subsequent boots the device skips provisioning and
+  goes straight to Wi-Fi association.
+- Long-pressing the BOOT button for 5+ seconds wipes both NVS namespaces
+  (Wi-Fi creds + our own PoP/token) and reboots back into provisioning.
+
 ## Building and flashing
 
 From the VS Code PlatformIO sidebar, or the terminal:
