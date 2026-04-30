@@ -7,8 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import 'auth_controller.dart';
 
-enum _Mode { signIn, signUp }
-
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
 
@@ -17,20 +15,8 @@ class SignInScreen extends ConsumerStatefulWidget {
 }
 
 class _SignInScreenState extends ConsumerState<SignInScreen> {
-  final _emailCtl = TextEditingController();
-  final _passwordCtl = TextEditingController();
-  final _nameCtl = TextEditingController();
-  _Mode _mode = _Mode.signUp;
   bool _busy = false;
   String? _error;
-
-  @override
-  void dispose() {
-    _emailCtl.dispose();
-    _passwordCtl.dispose();
-    _nameCtl.dispose();
-    super.dispose();
-  }
 
   Future<void> _run(Future<void> Function() action) async {
     setState(() {
@@ -39,12 +25,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     });
     try {
       await action();
-      if (mounted) context.go('/onboarding/profile');
+      if (mounted) context.go('/home');
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'cancelled') {
-        if (mounted) setState(() {});
-        return;
-      }
+      if (e.code == 'cancelled') return;
       if (mounted) setState(() => _error = e.message ?? e.code);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -53,18 +36,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     }
   }
 
-  void _emailSubmit() {
+  Future<void> _openEmailSheet() async {
     final ctl = ref.read(authControllerProvider);
-    final email = _emailCtl.text.trim();
-    final pw = _passwordCtl.text;
-    if (email.isEmpty || pw.isEmpty) {
-      setState(() => _error = 'Email and password required.');
-      return;
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: PrintimateColors.background,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      builder: (_) => _EmailAuthSheet(controller: ctl),
+    );
+    if (result == 'ok' && mounted) {
+      context.go('/home');
+    } else if (result != null && result.isNotEmpty && result != 'ok') {
+      if (mounted) setState(() => _error = result);
     }
-    _run(() => _mode == _Mode.signUp
-        ? ctl.signUpWithEmail(email: email, password: pw, displayName: _nameCtl.text)
-            .then((_) {})
-        : ctl.signInWithEmail(email: email, password: pw).then((_) {}));
   }
 
   @override
@@ -76,7 +61,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -84,7 +69,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => context.go('/intro'),
+                    onPressed: _busy ? null : () => context.go('/intro'),
                     icon: const Icon(Icons.arrow_back, color: PrintimateColors.text),
                   ),
                   const SizedBox(width: 8),
@@ -93,7 +78,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               ),
               const SizedBox(height: 8),
               const Divider(color: PrintimateColors.border, height: 1),
-              const SizedBox(height: 32),
+              const Spacer(),
               _ProviderButton(
                 icon: Icons.g_mobiledata,
                 label: 'CONTINUE WITH GOOGLE',
@@ -108,74 +93,33 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
-              const SizedBox(height: 16),
-              Row(children: [
-                const Expanded(child: Divider(color: PrintimateColors.border)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('OR', style: Theme.of(context).textTheme.bodyMedium),
-                ),
-                const Expanded(child: Divider(color: PrintimateColors.border)),
-              ]),
-              const SizedBox(height: 24),
-              if (_mode == _Mode.signUp) ...[
-                Text('NAME (OPTIONAL):', style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _nameCtl,
-                  decoration: const InputDecoration(hintText: 'Your name'),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Text('EMAIL:', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _emailCtl,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                decoration: const InputDecoration(hintText: 'you@example.com'),
-              ),
-              const SizedBox(height: 16),
-              Text('PASSWORD:', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _passwordCtl,
-                obscureText: true,
-                decoration: const InputDecoration(hintText: '••••••••'),
-                onSubmitted: (_) => _emailSubmit(),
+              _ProviderButton(
+                icon: Icons.alternate_email,
+                label: 'CONTINUE WITH EMAIL',
+                onPressed: _busy ? null : _openEmailSheet,
               ),
               const SizedBox(height: 20),
-              if (_error != null) ...[
-                Text(_error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.redAccent)),
-                const SizedBox(height: 12),
-              ],
-              OutlinedButton(
-                onPressed: _busy ? null : _emailSubmit,
-                child: _busy
-                    ? const SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: PrintimateColors.text),
-                      )
-                    : Text(_mode == _Mode.signUp ? 'CREATE ACCOUNT  →' : 'LOG IN  →'),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _busy
-                    ? null
-                    : () => setState(() {
-                          _mode = _mode == _Mode.signUp ? _Mode.signIn : _Mode.signUp;
-                          _error = null;
-                        }),
-                child: Text(
-                  _mode == _Mode.signUp
-                      ? 'Already have an account? Log in'
-                      : "Don't have an account? Sign up",
-                  style: const TextStyle(color: PrintimateColors.textDim),
+              if (_busy)
+                const Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: PrintimateColors.text,
+                    ),
+                  ),
                 ),
-              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ),
+              const Spacer(),
             ],
           ),
         ),
@@ -208,5 +152,234 @@ class _ProviderButton extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+enum _Mode { signIn, signUp }
+
+class _EmailAuthSheet extends StatefulWidget {
+  const _EmailAuthSheet({required this.controller});
+  final AuthController controller;
+
+  @override
+  State<_EmailAuthSheet> createState() => _EmailAuthSheetState();
+}
+
+class _EmailAuthSheetState extends State<_EmailAuthSheet> {
+  final _emailCtl = TextEditingController();
+  final _passwordCtl = TextEditingController();
+  final _nameCtl = TextEditingController();
+  final _passwordFocus = FocusNode();
+  _Mode _mode = _Mode.signUp;
+  int _step = 0;
+  bool _busy = false;
+  String? _error;
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _emailCtl.dispose();
+    _passwordCtl.dispose();
+    _nameCtl.dispose();
+    _passwordFocus.dispose();
+    super.dispose();
+  }
+
+  void _continueFromEmail() {
+    final email = _emailCtl.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Enter a valid email.');
+      return;
+    }
+    setState(() {
+      _step = 1;
+      _error = null;
+    });
+    Future.microtask(() => _passwordFocus.requestFocus());
+  }
+
+  Future<void> _submit() async {
+    final email = _emailCtl.text.trim();
+    final pw = _passwordCtl.text;
+    if (pw.isEmpty) {
+      setState(() => _error = 'Password required.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      if (_mode == _Mode.signUp) {
+        await widget.controller.signUpWithEmail(
+          email: email,
+          password: pw,
+          displayName: _nameCtl.text,
+        );
+      } else {
+        await widget.controller.signInWithEmail(email: email, password: pw);
+      }
+      if (mounted) Navigator.of(context).pop('ok');
+    } on FirebaseAuthException catch (e) {
+      if (mounted) setState(() => _error = e.message ?? e.code);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSignUp = _mode == _Mode.signUp;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: PrintimateColors.background,
+          border: Border(top: BorderSide(color: PrintimateColors.border)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 3,
+                color: PrintimateColors.border,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                if (_step > 0)
+                  IconButton(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() {
+                              _step = 0;
+                              _error = null;
+                            }),
+                    icon: const Icon(Icons.arrow_back, color: PrintimateColors.text),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                if (_step > 0) const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    isSignUp ? 'CREATE ACCOUNT' : 'LOG IN',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            if (_step == 0) ..._emailStep() else ..._passwordStep(isSignUp),
+            const SizedBox(height: 16),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            OutlinedButton(
+              onPressed: _busy
+                  ? null
+                  : (_step == 0 ? _continueFromEmail : _submit),
+              child: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: PrintimateColors.text,
+                      ),
+                    )
+                  : Text(_step == 0
+                      ? 'CONTINUE  →'
+                      : (isSignUp ? 'CREATE ACCOUNT  →' : 'LOG IN  →')),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => setState(() {
+                        _mode = isSignUp ? _Mode.signIn : _Mode.signUp;
+                        _error = null;
+                      }),
+              child: Text(
+                isSignUp
+                    ? 'Already have an account? Log in'
+                    : "Don't have an account? Sign up",
+                style: const TextStyle(color: PrintimateColors.textDim),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _emailStep() {
+    return [
+      Text('EMAIL', style: Theme.of(context).textTheme.labelLarge),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _emailCtl,
+        keyboardType: TextInputType.emailAddress,
+        autocorrect: false,
+        autofocus: true,
+        textInputAction: TextInputAction.next,
+        decoration: const InputDecoration(hintText: 'you@example.com'),
+        onSubmitted: (_) => _continueFromEmail(),
+      ),
+    ];
+  }
+
+  List<Widget> _passwordStep(bool isSignUp) {
+    return [
+      Text(
+        _emailCtl.text.trim(),
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      const SizedBox(height: 16),
+      if (isSignUp) ...[
+        Text('NAME (OPTIONAL)', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _nameCtl,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(hintText: 'Your name'),
+        ),
+        const SizedBox(height: 16),
+      ],
+      Text('PASSWORD', style: Theme.of(context).textTheme.labelLarge),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _passwordCtl,
+        focusNode: _passwordFocus,
+        obscureText: _obscure,
+        autofocus: !isSignUp,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          hintText: '••••••••',
+          suffixIcon: IconButton(
+            onPressed: () => setState(() => _obscure = !_obscure),
+            icon: Icon(
+              _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+              color: PrintimateColors.textDim,
+            ),
+          ),
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+    ];
   }
 }

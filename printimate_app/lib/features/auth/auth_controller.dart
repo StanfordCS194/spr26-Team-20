@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import 'user_profile_repository.dart';
+
 final firebaseAuthProvider = Provider<FirebaseAuth>((_) => FirebaseAuth.instance);
 
 final authStateProvider = StreamProvider<User?>((ref) {
@@ -13,8 +15,9 @@ final authStateProvider = StreamProvider<User?>((ref) {
 });
 
 class AuthController {
-  AuthController(this._auth);
+  AuthController(this._auth, this._profiles);
   final FirebaseAuth _auth;
+  final UserProfileRepository _profiles;
 
   Future<User> signUpWithEmail({
     required String email,
@@ -29,7 +32,9 @@ class AuthController {
       await cred.user!.updateDisplayName(displayName.trim());
       await cred.user!.reload();
     }
-    return _auth.currentUser!;
+    final user = _auth.currentUser!;
+    await _profiles.upsertFromAuth(user);
+    return user;
   }
 
   Future<User> signInWithEmail({
@@ -40,6 +45,7 @@ class AuthController {
       email: email.trim(),
       password: password,
     );
+    await _profiles.upsertFromAuth(cred.user!);
     return cred.user!;
   }
 
@@ -47,6 +53,7 @@ class AuthController {
     if (kIsWeb) {
       final provider = GoogleAuthProvider();
       final cred = await _auth.signInWithPopup(provider);
+      await _profiles.upsertFromAuth(cred.user!);
       return cred.user!;
     }
     final googleUser = await GoogleSignIn().signIn();
@@ -59,6 +66,7 @@ class AuthController {
       idToken: googleAuth.idToken,
     );
     final cred = await _auth.signInWithCredential(oauth);
+    await _profiles.upsertFromAuth(cred.user!);
     return cred.user!;
   }
 
@@ -68,6 +76,7 @@ class AuthController {
         ..addScope('email')
         ..addScope('name');
       final cred = await _auth.signInWithPopup(provider);
+      await _profiles.upsertFromAuth(cred.user!);
       return cred.user!;
     }
     if (!Platform.isIOS && !Platform.isMacOS) {
@@ -88,11 +97,17 @@ class AuthController {
       final fullName = [apple.givenName, apple.familyName].whereType<String>().join(' ').trim();
       if (fullName.isNotEmpty) await cred.user!.updateDisplayName(fullName);
     }
-    return _auth.currentUser!;
+    final user = _auth.currentUser!;
+    await _profiles.upsertFromAuth(user);
+    return user;
   }
 
   Future<void> updateDisplayName(String name) async {
     await _auth.currentUser?.updateDisplayName(name);
+    final user = _auth.currentUser;
+    if (user != null) {
+      await _profiles.upsertFromAuth(user);
+    }
   }
 
   Future<void> signOut() async {
@@ -104,5 +119,8 @@ class AuthController {
 }
 
 final authControllerProvider = Provider<AuthController>(
-  (ref) => AuthController(ref.watch(firebaseAuthProvider)),
+  (ref) => AuthController(
+    ref.watch(firebaseAuthProvider),
+    ref.watch(userProfileRepositoryProvider),
+  ),
 );
