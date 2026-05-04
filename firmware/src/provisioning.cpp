@@ -29,7 +29,7 @@
 //
 //   4. We pass `reset_provisioned = false` so the device picks up stored
 //      credentials on subsequent boots. The factory-reset path explicitly
-//      calls `wifi_prov_mgr_reset_provisioning()` before reboot.
+//      calls `network_prov_mgr_reset_wifi_provisioning()` before reboot.
 // =============================================================================
 #include "provisioning.h"
 
@@ -37,8 +37,8 @@
 #include <WiFiProv.h>
 #include <Preferences.h>
 #include <esp_wifi.h>
-#include <wifi_provisioning/manager.h>
-#include <wifi_provisioning/scheme_ble.h>
+#include <network_provisioning/manager.h>
+#include <network_provisioning/scheme_ble.h>
 
 #include "config.h"
 
@@ -85,9 +85,9 @@ void provisioning_begin() {
     //   uuid                 — 128-bit service UUID
     //   reset_provisioned    — false; honor stored creds across reboots
     WiFiProv.beginProvision(
-        WIFI_PROV_SCHEME_BLE,
-        WIFI_PROV_SCHEME_HANDLER_FREE_BLE,
-        WIFI_PROV_SECURITY_1,
+        NETWORK_PROV_SCHEME_BLE,
+        NETWORK_PROV_SCHEME_HANDLER_FREE_BLE,
+        NETWORK_PROV_SECURITY_1,
         g_pop,
         g_serviceName,
         /*service_key=*/nullptr,
@@ -107,11 +107,11 @@ void provisioning_loop() {
 
 void provisioning_end() {
     PRINTIMATE_LOG_I("Provisioning: tearing down (BLE memory will be freed)");
-    // The WIFI_PROV_SCHEME_HANDLER_FREE_BLE handler we passed to
+    // The NETWORK_PROV_SCHEME_HANDLER_FREE_BLE handler we passed to
     // beginProvision() arranges for the BLE stack memory to be released
     // on PROV_END. We just need to make sure the manager itself is
     // de-initialized so we don't leak its task.
-    wifi_prov_mgr_deinit();
+    network_prov_mgr_deinit();
 }
 
 bool provisioning_isComplete() {
@@ -139,12 +139,12 @@ void provisioning_factoryReset() {
 
     // Wipe Wi-Fi creds stored by WiFiProv. Safe to call even if the prov
     // manager is not currently initialized — it'll do a one-shot init.
-    wifi_prov_mgr_config_t cfg = {};
-    cfg.scheme = wifi_prov_scheme_ble;
-    cfg.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
-    if (wifi_prov_mgr_init(cfg) == ESP_OK) {
-        wifi_prov_mgr_reset_provisioning();
-        wifi_prov_mgr_deinit();
+    network_prov_mgr_config_t cfg = {};
+    cfg.scheme = network_prov_scheme_ble;
+    cfg.scheme_event_handler = NETWORK_PROV_EVENT_HANDLER_NONE;
+    if (network_prov_mgr_init(cfg) == ESP_OK) {
+        network_prov_mgr_reset_wifi_provisioning();
+        network_prov_mgr_deinit();
     }
 }
 
@@ -231,7 +231,7 @@ static void onWiFiProvEvent(arduino_event_t *event) {
 
         case ARDUINO_EVENT_PROV_CRED_FAIL: {
             const auto& info = event->event_info.prov_fail_reason;
-            if (info == WIFI_PROV_STA_AUTH_ERROR) {
+            if (info == NETWORK_PROV_WIFI_STA_AUTH_ERROR) {
                 PRINTIMATE_LOG_W("Provisioning failed: bad Wi-Fi password");
             } else {
                 PRINTIMATE_LOG_W("Provisioning failed: AP not found");
