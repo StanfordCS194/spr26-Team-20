@@ -1,16 +1,21 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/theme.dart';
-import '../auth/auth_controller.dart';
+import '../profile/profile_repository.dart';
+import 'drawing_canvas.dart';
 
 const int _printerWidthPx = 384;
+
+enum _Source { text, photo, draw }
 
 class SendScreen extends ConsumerStatefulWidget {
   const SendScreen({super.key});
@@ -22,18 +27,34 @@ class SendScreen extends ConsumerStatefulWidget {
 class _SendScreenState extends ConsumerState<SendScreen> {
   final _messageCtl = TextEditingController();
   final _picker = ImagePicker();
+  final _drawingController = DrawingController();
+  final GlobalKey<DrawingCanvasState> _canvasKey = GlobalKey();
 
+  _Source _source = _Source.text;
   Uint8List? _previewBytes;
-  String? _base64Image;
+  Uint8List? _selectedRawBytes;
   bool _processing = false;
   bool _sending = false;
+  String _sendStatus = '';
   String? _error;
   String? _info;
 
   @override
   void dispose() {
     _messageCtl.dispose();
+    _drawingController.dispose();
     super.dispose();
+  }
+
+  void _setSource(_Source s) {
+    if (s == _source) return;
+    setState(() {
+      _source = s;
+      _previewBytes = null;
+      _selectedRawBytes = null;
+      _info = null;
+      _error = null;
+    });
   }
 
   Future<void> _pickImage() async {
@@ -47,16 +68,34 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         maxWidth: 2048,
       );
       if (picked == null) return;
+      final mime = picked.mimeType ?? '';
+      final name = picked.name.toLowerCase();
+      if (name.endsWith('.gif') || mime == 'image/gif') {
+        setState(() => _error = 'Animated images aren\'t supported.');
+        return;
+      }
       setState(() => _processing = true);
       final raw = await picked.readAsBytes();
-      final result = await _processForReceiptPrinter(raw);
+      final decoder = img.findDecoderForData(raw);
+      if (decoder == null) {
+        setState(() => _error = 'Unsupported image format.');
+        return;
+      }
+      final probed = decoder.decode(raw);
+      if (probed == null) {
+        setState(() => _error = 'Could not read image.');
+        return;
+      }
+      if (probed.numFrames > 1) {
+        setState(() => _error = 'Animated images aren\'t supported.');
+        return;
+      }
+      final preview = await compute(_grayscaleOnly, raw);
       if (!mounted) return;
       setState(() {
-        _previewBytes = result.pngBytes;
-        _base64Image = result.base64;
-        _info = '${result.width}×${result.height}px • '
-            '${(result.pngBytes.lengthInBytes / 1024).toStringAsFixed(1)} KB '
-            '• base64 ${(result.base64.length / 1024).toStringAsFixed(1)} KB';
+        _previewBytes = preview;
+        _selectedRawBytes = raw;
+        _info = '${probed.width}×${probed.height}px';
       });
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not load image: $e');
@@ -68,130 +107,322 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   void _clearImage() {
     setState(() {
       _previewBytes = null;
-      _base64Image = null;
+      _selectedRawBytes = null;
       _info = null;
     });
   }
 
+  Future<Uint8List?> _captureDrawingRaw() async {
+    final state = _canvasKey.currentState;
+    if (state == null) return null;
+    final png = await state.exportPng(targetWidth: _printerWidthPx);
+    if (png == null) return null;
+    final decoded = img.decodeImage(png);
+    if (decoded == null) return null;
+    // Canvas is white-on-black for visual contrast; printer needs black-on-white.
+    final inverted = img.invert(decoded);
+    return Uint8List.fromList(img.encodePng(inverted));
+  }
+
   Future<void> _send() async {
-    final text = _messageCtl.text.trim();
-    if (text.isEmpty && _base64Image == null) {
-      setState(() => _error = 'Add a message or an image first.');
-      return;
-    }
     setState(() {
       _sending = true;
+      _sendStatus = 'PREPARING...';
       _error = null;
     });
     try {
-      // TODO: write to Firestore once the endpoint is provided.
-      // Example shape (subject to change):
-      // await FirebaseFirestore.instance.collection('messages').add({
-      //   'senderUid': FirebaseAuth.instance.currentUser!.uid,
-      //   'body': text,
-      //   'imageBase64': _base64Image,         // 1-bit PNG, FS-dithered
-      //   'imageWidth': _printerWidthPx,
-      //   'createdAt': FieldValue.serverTimestamp(),
-      //   'status': 'queued',
-      // });
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      Uint8List rawForPipeline;
+      String sourceLabel;
+
+      switch (_source) {
+        case _Source.text:
+          final text = _messageCtl.text.trim();
+          if (text.isEmpty) {
+            setState(() => _error = 'Type a message first.');
+            return;
+          }
+          setState(() => _sendStatus = 'RENDERING TEXT...');
+          rawForPipeline = await _renderTextToPng(text);
+          sourceLabel = 'text';
+          break;
+        case _Source.photo:
+          if (_selectedRawBytes == null) {
+            setState(() => _error = 'Attach an image first.');
+            return;
+          }
+          rawForPipeline = _selectedRawBytes!;
+          sourceLabel = 'photo';
+          break;
+        case _Source.draw:
+          if (_drawingController.isEmpty) {
+            setState(() => _error = 'Draw something first.');
+            return;
+          }
+          final drawing = await _captureDrawingRaw();
+          if (drawing == null) {
+            setState(() => _error = 'Could not capture drawing.');
+            return;
+          }
+          rawForPipeline = drawing;
+          sourceLabel = 'drawing';
+          break;
+      }
+
+      setState(() => _sendStatus = 'PROCESSING IMAGE...');
+      final processed = await _processForReceiptPrinter(rawForPipeline);
+
+      setState(() => _sendStatus = 'UPLOADING...');
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final storageRef = ref
+          .read(firebaseStorageProvider)
+          .ref('messages/$uid/$timestamp.png');
+      await storageRef.putData(
+        processed.pngBytes,
+        SettableMetadata(
+          contentType: 'image/png',
+          customMetadata: {
+            'senderUid': uid,
+            'createdAtMs': '$timestamp',
+            'source': sourceLabel,
+            'widthPx': '${processed.width}',
+            'heightPx': '${processed.height}',
+          },
+        ),
+      );
+
       if (!mounted) return;
       _messageCtl.clear();
       _clearImage();
+      _drawingController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Queued (stub — Firestore endpoint TBD).')),
+        SnackBar(content: Text('Sent → messages/$uid/$timestamp.png')),
       );
     } catch (e) {
       if (mounted) setState(() => _error = 'Send failed: $e');
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _sendStatus = '';
+        });
+      }
     }
-  }
-
-  Future<void> _signOut() async {
-    await ref.read(authControllerProvider).signOut();
-    if (mounted) context.go('/intro');
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = _previewBytes != null;
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.print_outlined, color: PrintimateColors.text),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text('COMPOSE',
-                        style: Theme.of(context).textTheme.headlineMedium),
-                  ),
-                  IconButton(
-                    onPressed: _signOut,
-                    icon: const Icon(Icons.logout, color: PrintimateColors.textDim),
-                    tooltip: 'Sign out',
-                  ),
+    return Stack(
+      children: [
+        SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.print_outlined,
+                        color: PrintimateColors.text),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text('SEND',
+                          style: Theme.of(context).textTheme.headlineMedium),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Divider(color: PrintimateColors.border, height: 1),
+                const SizedBox(height: 24),
+                _SourceToggle(value: _source, onChanged: _setSource),
+                const SizedBox(height: 24),
+                if (_source == _Source.text) _buildText(context),
+                if (_source == _Source.photo) _buildPhoto(context),
+                if (_source == _Source.draw) _buildDraw(context),
+                const SizedBox(height: 24),
+                if (_error != null) ...[
+                  Text(_error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.redAccent)),
+                  const SizedBox(height: 12),
                 ],
-              ),
-              const SizedBox(height: 8),
-              const Divider(color: PrintimateColors.border, height: 1),
-              const SizedBox(height: 32),
-              Text('MESSAGE:', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _messageCtl,
-                maxLines: 5,
-                minLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Type something to print...',
+                OutlinedButton(
+                  onPressed: _sending ? null : _send,
+                  child: const Text('SEND  →'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_sending) _SendingOverlay(status: _sendStatus),
+      ],
+    );
+  }
+
+  Widget _buildText(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('MESSAGE', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _messageCtl,
+          maxLines: 6,
+          minLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'Type something to print...',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhoto(BuildContext context) {
+    final hasImage = _previewBytes != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('IMAGE', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        if (hasImage)
+          _ImagePreview(bytes: _previewBytes!, onClear: _clearImage)
+        else
+          OutlinedButton(
+            onPressed: _processing ? null : _pickImage,
+            child: _processing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: PrintimateColors.text,
+                    ),
+                  )
+                : const Text('+  ATTACH IMAGE'),
+          ),
+        if (_info != null) ...[
+          const SizedBox(height: 8),
+          Text(_info!, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDraw(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('DRAW', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: PrintimateColors.border),
+          ),
+          child: DrawingCanvas(
+            key: _canvasKey,
+            controller: _drawingController,
+            aspectRatio: 1.0,
+          ),
+        ),
+        const SizedBox(height: 12),
+        DrawingToolbar(controller: _drawingController),
+      ],
+    );
+  }
+}
+
+class _SendingOverlay extends StatelessWidget {
+  const _SendingOverlay({required this.status});
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: AbsorbPointer(
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.7),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: PrintimateColors.text,
                 ),
               ),
-              const SizedBox(height: 24),
-              Text('IMAGE (OPTIONAL):',
-                  style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              if (hasImage) _ImagePreview(
-                bytes: _previewBytes!,
-                onClear: _clearImage,
-              ) else OutlinedButton(
-                onPressed: _processing ? null : _pickImage,
-                child: _processing
-                    ? const SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: PrintimateColors.text),
-                      )
-                    : const Text('+  ATTACH IMAGE'),
-              ),
-              if (_info != null) ...[
-                const SizedBox(height: 8),
-                Text(_info!, style: Theme.of(context).textTheme.bodyMedium),
-              ],
-              const SizedBox(height: 32),
-              if (_error != null) ...[
-                Text(_error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.redAccent)),
-                const SizedBox(height: 12),
-              ],
-              OutlinedButton(
-                onPressed: _sending ? null : _send,
-                child: _sending
-                    ? const SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: PrintimateColors.text),
-                      )
-                    : const Text('SEND  →'),
+              const SizedBox(height: 16),
+              Text(
+                status,
+                style: const TextStyle(
+                  fontFamily: 'Courier',
+                  fontFamilyFallback: ['Menlo', 'monospace'],
+                  color: PrintimateColors.text,
+                  fontSize: 13,
+                  letterSpacing: 1.5,
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SourceToggle extends StatelessWidget {
+  const _SourceToggle({required this.value, required this.onChanged});
+  final _Source value;
+  final ValueChanged<_Source> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      (_Source.text, 'TEXT'),
+      (_Source.photo, 'PHOTO'),
+      (_Source.draw, 'DRAW'),
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: PrintimateColors.border),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < items.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(items[i].$1),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: value == items[i].$1
+                        ? PrintimateColors.text
+                        : Colors.transparent,
+                    border: i == 0
+                        ? null
+                        : const Border(
+                            left: BorderSide(color: PrintimateColors.border),
+                          ),
+                  ),
+                  child: Text(
+                    items[i].$2,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Courier',
+                      fontFamilyFallback: const ['Menlo', 'monospace'],
+                      color: value == items[i].$1
+                          ? PrintimateColors.background
+                          : PrintimateColors.textDim,
+                      fontSize: 13,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -243,30 +474,75 @@ class _ProcessedImage {
   final int height;
 }
 
-Future<_ProcessedImage> _processForReceiptPrinter(Uint8List raw) async {
+Future<_ProcessedImage> _processForReceiptPrinter(Uint8List raw) {
+  return compute(_resizeGrayscaleDither, raw);
+}
+
+_ProcessedImage _resizeGrayscaleDither(Uint8List raw) {
   final decoded = img.decodeImage(raw);
   if (decoded == null) {
     throw Exception('Unsupported image format.');
   }
-  // 1. Resize so width matches the receipt printer head.
   final resized = decoded.width == _printerWidthPx
       ? decoded
       : img.copyResize(decoded, width: _printerWidthPx);
-  // 2. Grayscale.
   final gray = img.grayscale(resized);
-  // 3. Floyd–Steinberg dither down to 2 colors (pure black / pure white).
   final dithered = img.ditherImage(
     gray,
     kernel: img.DitherKernel.floydSteinberg,
     serpentine: true,
   );
-  // 4. Encode PNG and base64.
   final pngBytes = Uint8List.fromList(img.encodePng(dithered));
-  final b64 = base64Encode(pngBytes);
   return _ProcessedImage(
     pngBytes: pngBytes,
-    base64: b64,
+    base64: base64Encode(pngBytes),
     width: dithered.width,
     height: dithered.height,
   );
+}
+
+Uint8List _grayscaleOnly(Uint8List raw) {
+  final decoded = img.decodeImage(raw);
+  if (decoded == null) {
+    throw Exception('Unsupported image format.');
+  }
+  final gray = img.grayscale(decoded);
+  return Uint8List.fromList(img.encodePng(gray));
+}
+
+Future<Uint8List> _renderTextToPng(String text) async {
+  const padding = 16.0;
+  const fontSize = 22.0;
+  const lineHeight = 1.3;
+  final maxWidth = _printerWidthPx - padding * 2;
+
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: const TextStyle(
+        fontFamily: 'Courier',
+        fontFamilyFallback: ['Menlo', 'monospace'],
+        color: Color(0xFF000000),
+        fontSize: fontSize,
+        height: lineHeight,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  );
+  painter.layout(maxWidth: maxWidth);
+
+  final width = _printerWidthPx;
+  final height = (painter.height + padding * 2).ceil();
+
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  canvas.drawRect(
+    Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    Paint()..color = const Color(0xFFFFFFFF),
+  );
+  painter.paint(canvas, const Offset(padding, padding));
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width, height);
+  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  return byteData!.buffer.asUint8List();
 }
