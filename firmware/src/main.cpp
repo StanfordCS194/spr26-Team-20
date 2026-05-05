@@ -105,6 +105,8 @@ void loop() {
                 } else {
                     PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
                                      g_wifiRetryCount + 1);
+                    WiFi.disconnect(false, false);
+                    WiFi.mode(WIFI_STA);
                     // No SSID/password args: WiFi.begin() without arguments
                     // pulls credentials from the IDF's NVS, where WiFiProv
                     // stored them during provisioning.
@@ -129,12 +131,12 @@ void loop() {
             // If returns, transition to ConnectingWifi.
             PRINTIMATE_LOG_I("Ready, handing control to printer");
             bogusPrint();
-            PRINTIMATE_LOG_W("Printer returned control. (Re)ConnectingWifi");
+            PRINTIMATE_LOG_I("Printer returned control. (Re)ConnectingWifi");
             transitionTo(BootState::ConnectingWifi);
             break;
 
         case BootState::Reconnecting:
-            // TODO: retry MQTT with backoff; return to Ready on success.
+            // TODO: retry WiFi connection; return to Ready on success.
             break;
     }
 
