@@ -3,7 +3,7 @@
 // =============================================================================
 // This file contains the top-level state machine described in the design doc.
 // Each state's real work is delegated to a module (provisioning.cpp,
-// printer.cpp, mqtt_client.cpp). Keep this file focused on orchestration.
+// printer.cpp). Keep this file focused on orchestration.
 // =============================================================================
 #include <Arduino.h>
 #include <Preferences.h>
@@ -13,7 +13,6 @@
 #include "pins.h"
 #include "provisioning.h"
 // #include "printer.h"       // Niklas will flesh out
-// #include "mqtt_client.h"   // stub for now
 
 // ---- State machine ----------------------------------------------------------
 enum class BootState {
@@ -44,6 +43,9 @@ static void transitionTo(BootState next);
 static void checkResetButton();
 static uint32_t backoffMs(int attempt);
 static const char* stateName(BootState s);
+
+// bogus printer fill-in while waiting for printer code
+static void bogusPrint();
 
 // =============================================================================
 // Arduino entry points
@@ -123,8 +125,12 @@ void loop() {
             break;
 
         case BootState::Ready:
-            // TODO: mqtt_client_loop() + printer_handleJobs();
-            // If MQTT drops, transition to Reconnecting.
+            // TODO: printer_fetchAndPrintMessages(Printer &printer)
+            // If returns, transition to ConnectingWifi.
+            PRINTIMATE_LOG_I("Ready, handing control to printer");
+            bogusPrint();
+            PRINTIMATE_LOG_W("Printer returned control. (Re)ConnectingWifi");
+            transitionTo(BootState::ConnectingWifi);
             break;
 
         case BootState::Reconnecting:
@@ -161,7 +167,7 @@ static void onStateEntry(BootState s) {
             // TODO: pulse blue LED
             break;
         case BootState::Ready:
-            // TODO: solid green LED; connect MQTT
+            // TODO: solid green LED;
             break;
         default: break;
     }
@@ -223,4 +229,10 @@ static const char* stateName(BootState s) {
         case BootState::Reconnecting:     return "Reconnecting";
     }
     return "?";
+}
+
+static void bogusPrint() {
+    while (WiFi.status() == WL_CONNECTED) {
+        delay(5);
+    }
 }

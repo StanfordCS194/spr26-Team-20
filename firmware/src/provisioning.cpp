@@ -108,10 +108,13 @@ void provisioning_loop() {
 void provisioning_end() {
     PRINTIMATE_LOG_I("Provisioning: tearing down (BLE memory will be freed)");
     // The NETWORK_PROV_SCHEME_HANDLER_FREE_BLE handler we passed to
-    // beginProvision() arranges for the BLE stack memory to be released
-    // on PROV_END. We just need to make sure the manager itself is
-    // de-initialized so we don't leak its task.
-    network_prov_mgr_deinit();
+    // beginProvision() arranges for the manager to be deinitialized AND
+    // the BLE stack memory to be released on PROV_END. Calling
+    // network_prov_mgr_deinit() ourselves here would be a double-free of
+    // the manager's internal FreeRTOS queues — the framework already did
+    // it. Leaving this function as effectively a no-op (just logging) is
+    // intentional. If we ever stop using the FREE_BLE handler, this is
+    // where the explicit deinit would belong.
 }
 
 bool provisioning_isComplete() {
@@ -137,8 +140,18 @@ void provisioning_factoryReset() {
     prefs.clear();
     prefs.end();
 
-    // Wipe Wi-Fi creds stored by WiFiProv. Safe to call even if the prov
-    // manager is not currently initialized — it'll do a one-shot init.
+    // Wipe Wi-Fi creds stored by the provisioning manager. Safe to call even
+    // if the manager is not currently initialized — it'll do a one-shot init.
+    //
+    // IMPORTANT: in the network_prov API, two similarly-named functions
+    // exist with different semantics:
+    //   - network_prov_mgr_reset_provisioning():
+    //       resets the manager's internal state machine. Does NOT wipe creds.
+    //   - network_prov_mgr_reset_wifi_provisioning():
+    //       wipes the stored Wi-Fi credentials.
+    // We want the second one for a factory reset. (In the older wifi_prov API,
+    // the first name had the credential-wiping semantics — beware when
+    // copy-pasting from older examples or rolling back the platform pin.)
     network_prov_mgr_config_t cfg = {};
     cfg.scheme = network_prov_scheme_ble;
     cfg.scheme_event_handler = NETWORK_PROV_EVENT_HANDLER_NONE;
