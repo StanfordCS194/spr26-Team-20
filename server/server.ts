@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-import { Collections } from "./database_names.js";
-import type { MessageDocument } from "./database_names.js";
+import { Collections, PrinterFields } from "./database_names.js";
+import type { MessageDocument, PrinterDocument } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -23,7 +23,7 @@ if (envFiles.length === 0) {
   throw new Error("No JSON files found in env directory");
 }
 
-const serviceAccountPath = join(envDir, envFiles[0]);
+const serviceAccountPath = join(envDir, envFiles[0]!);
 
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
 
@@ -159,35 +159,68 @@ app.get("/messages", async (req, res) => {
  * PRINTER SETUP / MAINTENANCE ROUTES
  */
 
-app.get("/status", (req, res) => {
-  let pid = req.query.pid as string;
+app.get("/status", async (req, res) => {
+  const pid = req.query.pid as string;
 
-  var isOnline: boolean = true;
-  /*
-   * @Felipe: Get the online_status field from the database and store it in isOnline.
-   */
-  if (isOnline) {
-    res.send(200).json({ status: "Printer is online" });
-  } else {
-    res.status(503).json({ status: "Printer is offline" });
-  }
-});
-
-app.post("/setup", (req, res) => {
-  let pid = req.query.pid as string;
-  let uid = req.body.uid as string;
-
-  //First we need to check if the printer is already owned.
-  var owner_uid: string | null = null;
-  /*
-    @Felipe: Fetch the owner_uid field from the database and store it in ownerUid.
-    */
-  if (owner_uid != null) {
-    res.status(403).send("Printer is already owned by another user");
+  if (!pid) {
+    res.status(400).send("Missing required field: pid");
     return;
   }
 
-  //Next we want to assign this pid to to the uid
+  try {
+    const printerDoc = await db.collection(Collections.printers).doc(pid).get();
+
+    if (!printerDoc.exists) {
+      res.status(404).send("Printer not found");
+      return;
+    }
+
+    const printerData = printerDoc.data() as PrinterDocument | undefined;
+    const isOnline = printerData?.[PrinterFields.onlineStatus] ?? false;
+
+    if (isOnline) {
+      res.status(200).json({ status: "Printer is online" });
+      return;
+    }
+
+    res.status(503).json({ status: "Printer is offline" });
+  } catch (error) {
+    console.error("Failed to fetch printer status", error);
+    res.status(500).send("Failed to fetch printer status");
+  }
+});
+
+app.post("/setup", async (req, res) => {
+  const pid = req.query.pid as string;
+  const uid = req.body.uid as string;
+
+  if (!pid || !uid) {
+    res.status(400).send("Missing required fields: pid, uid");
+    return;
+  }
+
+  try {
+    // First we need to check if the printer is already owned.
+    const printerDoc = await db.collection(Collections.printers).doc(pid).get();
+
+    if (!printerDoc.exists) {
+      res.status(404).send("Printer not found");
+      return;
+    }
+
+    const printerData = printerDoc.data() as PrinterDocument | undefined;
+    const owner_uid = printerData?.[PrinterFields.ownerUid] ?? null;
+
+    if (owner_uid != null) {
+      res.status(403).send("Printer is already owned by another user");
+      return;
+    }
+
+    //Next we want to assign this pid to to the uid
+  } catch (error) {
+    console.error("Failed to set up printer", error);
+    res.status(500).send("Failed to set up printer");
+  }
 });
 
 /*
@@ -384,9 +417,23 @@ app.post("/reject-permission-request", async (req, res) => {
     res.status(200).send("Permission request rejected");
 });
 
+/**
+ * SERVER INFO ROUTE
+ */
 
-
-
+app.get("/server-info", (req, res) => {
+  const localIPs = getLocalIPv4Addresses();
+  const urls = [
+    `http://localhost:${port}`,
+    ...localIPs.map(ip => `http://${ip}:${port}`)
+  ];
+  
+  res.status(200).json({ 
+    port,
+    urls,
+    primaryUrl: localIPs.length > 0 ? `http://${localIPs[0]}:${port}` : `http://localhost:${port}`
+  });
+});
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
