@@ -1,7 +1,9 @@
 {
   "type": "module",
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "firebase": "^12.12.1",
+    "firebase-admin": "^13.8.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -9,9 +11,9 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
-  "scripts" : {
+  "scripts": {
     "dev": "tsx watch server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node server.js"
   }
 }
