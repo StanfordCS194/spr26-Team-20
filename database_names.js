@@ -1,6 +1,8 @@
 export const Collections = {
     printers: "printers",
     messages: "messages",
+    users: "users",
+    permissionRequests: "permissionRequests",
 };
 export const PrinterFields = {
     onlineStatus: "onlineStatus",
@@ -14,6 +16,10 @@ export const MessageFields = {
     messageText: "messageText",
     images: "images",
     printed: "printed",
+};
+export const permissionRequestFields = {
+    pid: "pid",
+    fromUid: "fromUid",
 };
 export const Paths = {
     printer: (pid) => [Collections.printers, pid],
