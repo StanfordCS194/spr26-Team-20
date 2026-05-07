@@ -1,6 +1,10 @@
+
+
 export const Collections = {
 	printers: "printers",
 	messages: "messages",
+    users: "users",
+    permissionRequests: "permissionRequests",
 } as const;
 
 export const PrinterFields = {
@@ -16,6 +20,11 @@ export const MessageFields = {
 	messageText: "messageText",
 	images: "images",
 	printed: "printed",
+} as const;
+
+export const permissionRequestFields = {
+    pid: "pid",
+    fromUid: "fromUid",
 } as const;
 
 export type FirestoreBytesLike = Uint8Array;

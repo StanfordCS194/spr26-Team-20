@@ -72,10 +72,12 @@ app.get("/messages", async (req, res) => {
                 printed: data.printed,
             };
         });
+        //If no messages are found then we want to return a 404 error.
         if (messages.length === 0) {
             res.status(404).send("Message not found");
             return;
         }
+        //We have all the messages this printer has recieved, we want to filter out the messages that have already been printed and return the rest.
         var outputMessage = [];
         for (const message of messages) {
             if (message.printed) {
@@ -119,6 +121,54 @@ app.post("/setup", (req, res) => {
         return;
     }
     //Next we want to assign this pid to to the uid
+});
+/*
+* PERMISSION ROUTE
+*/
+app.post("/send-permission-request", async (req, res) => {
+    let pid = req.query.pid;
+    let uid = req.body.fromUid;
+    var currentRequests = await db
+        .collection(Collections.permissionRequests)
+        .doc(pid)
+        .get();
+    var requestList = [];
+    if (currentRequests.exists) {
+        var currentData = currentRequests.data();
+        if (currentData) {
+            requestList = currentData.fromUid;
+            requestList.push(uid);
+        }
+    }
+    else {
+        requestList.push(uid);
+    }
+    await db.collection(Collections.permissionRequests).doc(pid).set({
+        fromUid: requestList,
+    });
+    res.status(200).send("Permission request sent");
+});
+app.get("/get-permission-requests", async (req, res) => {
+    let pid = req.query.pid;
+    db.collection(Collections.permissionRequests)
+        .doc(pid)
+        .get()
+        .then((doc) => {
+        if (!doc.exists) {
+            res.status(404).send("No permission requests found for this printer");
+            return;
+        }
+        var data = doc.data();
+        var requestList = [];
+        if (data) {
+            requestList = data.fromUid;
+        }
+        res.status(200).json({ fromUid: requestList });
+    })
+        .catch((error) => {
+        console.error("Error fetching permission requests", error);
+        res.status(500).send("Failed to fetch permission requests");
+    });
 });
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
