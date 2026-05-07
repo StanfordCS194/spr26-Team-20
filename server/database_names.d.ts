@@ -1,6 +1,8 @@
 export declare const Collections: {
     readonly printers: "printers";
     readonly messages: "messages";
+    readonly users: "users";
+    readonly permissionRequests: "permissionRequests";
 };
 export declare const PrinterFields: {
     readonly onlineStatus: "onlineStatus";
@@ -14,6 +16,10 @@ export declare const MessageFields: {
     readonly messageText: "messageText";
     readonly images: "images";
     readonly printed: "printed";
+};
+export declare const permissionRequestFields: {
+    readonly pid: "pid";
+    readonly fromUid: "fromUid";
 };
 export type FirestoreBytesLike = Uint8Array;
 export type FirestoreTimestampLike = Date | {
@@ -40,6 +46,8 @@ export declare const Schema: {
     readonly collections: {
         readonly printers: "printers";
         readonly messages: "messages";
+        readonly users: "users";
+        readonly permissionRequests: "permissionRequests";
     };
     readonly printerFields: {
         readonly onlineStatus: "onlineStatus";
