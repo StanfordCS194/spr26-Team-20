@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+
 
 import '../../app/theme.dart';
 import '../profile/profile_repository.dart';
@@ -26,6 +28,7 @@ class SendScreen extends ConsumerStatefulWidget {
 
 class _SendScreenState extends ConsumerState<SendScreen> {
   final _messageCtl = TextEditingController();
+  final _printerIdCtl = TextEditingController();
   final _picker = ImagePicker();
   final _drawingController = DrawingController();
   final GlobalKey<DrawingCanvasState> _canvasKey = GlobalKey();
@@ -42,6 +45,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   @override
   void dispose() {
     _messageCtl.dispose();
+    _printerIdCtl.dispose();
     _drawingController.dispose();
     super.dispose();
   }
@@ -191,6 +195,36 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         ),
       );
 
+      setState(() => _sendStatus = 'SENDING TO SERVER...');
+      final printerId = _printerIdCtl.text.trim();
+      if (printerId.isEmpty) {
+        setState(() => _error = 'Enter a printer ID first.');
+        return;
+      }
+
+      final messageText = sourceLabel == 'text' ? _messageCtl.text : '[${sourceLabel.toUpperCase()}]';
+      final currentUser = FirebaseAuth.instance.currentUser!;
+
+      try {
+        final response = await http.post(
+          Uri.parse('http://10.31.214.158:3000/send?pid=$printerId'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'authorUid': currentUser.uid,
+            'authorName': currentUser.displayName ?? 'Unknown',
+            'messageText': messageText,
+            'images': [],
+          }),
+        );
+
+        if (response.statusCode != 201) {
+          throw Exception('Server returned ${response.statusCode}: ${response.body}');
+        }
+      } catch (e) {
+        if (mounted) setState(() => _error = 'Server send failed: $e');
+        return;
+      }
+
       if (!mounted) return;
       _messageCtl.clear();
       _clearImage();
@@ -236,6 +270,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 const SizedBox(height: 24),
                 _SourceToggle(value: _source, onChanged: _setSource),
                 const SizedBox(height: 24),
+                _buildPrinterSelector(context),
+                const SizedBox(height: 24),
                 if (_source == _Source.text) _buildText(context),
                 if (_source == _Source.photo) _buildPhoto(context),
                 if (_source == _Source.draw) _buildDraw(context),
@@ -255,6 +291,22 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           ),
         ),
         if (_sending) _SendingOverlay(status: _sendStatus),
+      ],
+    );
+  }
+
+  Widget _buildPrinterSelector(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('PRINTER ID', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _printerIdCtl,
+          decoration: const InputDecoration(
+            hintText: 'Enter printer ID...',
+          ),
+        ),
       ],
     );
   }
