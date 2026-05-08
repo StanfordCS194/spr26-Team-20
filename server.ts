@@ -242,6 +242,146 @@ app.get("/get-permission-requests", async (req, res) => {
     });
 });
 
+app.post("/accept-permission-request", async (req, res) => {
+    let ownersUid = req.body.ownersUid as string;
+    let pid = req.body.pid as string;
+    let requestersUid = req.body.requestersUid as string;
+
+    //First we need to check if the ownerUid is actually the owner of this printer.
+    let userDoc = await db.collection(Collections.users).doc(ownersUid).get();
+    if (!userDoc.exists) {
+        res.status(404).send("Owner user not found");
+        return;
+    }
+
+    //Check if the owner actually owns this printer
+    let userData = userDoc.data();
+    let ownedPids: string[] = [];
+    if (userData && userData.ownedPids) {
+        ownedPids = userData.ownedPids as string[];
+
+        if (!ownedPids.includes(pid)) {
+            res.status(403).send("You do not have permission to accept requests for this printer");
+            return;
+        }
+    }
+
+    let request = await db.collection(Collections.permissionRequests).doc(pid).get();
+    if (!request.exists) {
+        res.status(404).send("No permission requests found for this printer");
+        return;
+    }
+
+    //Check if the requester is actually in the list of permission requests for this printer.
+    let requestData = request.data();
+    let fromUidList: string[] = [];
+    console.log("Request data:", requestData);
+    if (requestData && requestData.fromUid) {
+        fromUidList = requestData.fromUid as string[];
+
+        if (!fromUidList.includes(requestersUid)) {
+            res.status(404).send("This user did not request permission for this printer");
+            return;
+        }
+
+        // Remove the accepted requester from pending permission requests
+        const updatedFromUidList = fromUidList.filter(
+          (pendingUid) => pendingUid !== requestersUid
+        );
+
+        // If there are no more pending requests, delete the permission request document; otherwise, update it with the remaining requests
+        if (updatedFromUidList.length === 0) {
+          await db.collection(Collections.permissionRequests).doc(pid).delete();
+        } else {
+          await db.collection(Collections.permissionRequests).doc(pid).update({
+            fromUid: updatedFromUidList,
+          });
+        }
+    }
+    
+    let requesterDoc = await db.collection(Collections.users).doc(requestersUid).get();
+    if (!requesterDoc.exists) {
+        res.status(404).send("Requester user not found");
+        return;
+    }
+
+    //Add this printer to the requesters list of printers they have access to.
+    let requesterData = requesterDoc.data();
+    let friendedPids: string[] = [];
+    if (requesterData && requesterData.friendedPids) {
+        friendedPids = requesterData.friendedPids as string[];
+    }
+    friendedPids.push(pid);
+    await db.collection(Collections.users).doc(requestersUid).update({
+        friendedPids: friendedPids,
+    });
+
+    res.status(200).send("Permission request accepted");
+}); 
+
+app.post("/reject-permission-request", async (req, res) => {
+    let ownersUid = req.body.ownersUid as string;
+    let pid = req.body.pid as string;
+    let requestersUid = req.body.requestersUid as string;
+
+    //First we need to check if the ownerUid is actually the owner of this printer.
+    let userDoc = await db.collection(Collections.users).doc(ownersUid).get();
+    if (!userDoc.exists) {
+        res.status(404).send("Owner user not found");
+        return;
+    }
+
+    //Check if the owner actually owns this printer
+    let userData = userDoc.data();
+    let ownedPids: string[] = [];
+    if (userData && userData.ownedPids) {
+        ownedPids = userData.ownedPids as string[];
+
+        if (!ownedPids.includes(pid)) {
+            res.status(403).send("You do not have permission to reject requests for this printer");
+            return;
+        }
+    }
+
+    let request = await db.collection(Collections.permissionRequests).doc(pid).get();
+    if (!request.exists) {
+        res.status(404).send("No permission requests found for this printer");
+        return;
+    }
+
+    //Check if the requester is actually in the list of permission requests for this printer.
+    let requestData = request.data();
+    let fromUidList: string[] = [];
+    console.log("Request data:", requestData);
+    if (requestData && requestData.fromUid) {
+        fromUidList = requestData.fromUid as string[];
+
+        if (!fromUidList.includes(requestersUid)) {
+            res.status(404).send("This user did not request permission for this printer");
+            return;
+        }
+
+        // Remove the rejected requester from pending permission requests
+        const updatedFromUidList = fromUidList.filter(
+          (pendingUid) => pendingUid !== requestersUid
+        );
+
+        // If there are no more pending requests, delete the permission request document; otherwise, update it with the remaining requests
+        if (updatedFromUidList.length === 0) {
+          await db.collection(Collections.permissionRequests).doc(pid).delete();
+        } else {
+          await db.collection(Collections.permissionRequests).doc(pid).update({
+            fromUid: updatedFromUidList,
+          });
+        }
+    }
+
+    res.status(200).send("Permission request rejected");
+});
+
+
+
+
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
