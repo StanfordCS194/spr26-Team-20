@@ -16,6 +16,7 @@ import '../profile/profile_repository.dart';
 import 'drawing_canvas.dart';
 
 const int _printerWidthPx = 384;
+const String _defaultServerUrl = 'http://localhost:3000';
 
 enum _Source { text, photo, draw }
 
@@ -41,6 +42,31 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   String _sendStatus = '';
   String? _error;
   String? _info;
+  String _serverUrl = _defaultServerUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchServerUrl();
+  }
+
+  Future<void> _fetchServerUrl() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_defaultServerUrl/server-info'),
+      ).timeout(const Duration(seconds: 2));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _serverUrl = data['primaryUrl'] ?? _defaultServerUrl;
+        });
+      }
+    } catch (e) {
+      // Fall back to default if fetch fails
+      debugPrint('Failed to fetch server URL: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -207,7 +233,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
       try {
         final response = await http.post(
-          Uri.parse('http://10.31.214.158:3000/send?pid=$printerId'),
+          Uri.parse('$_serverUrl/send?pid=$printerId'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'authorUid': currentUser.uid,

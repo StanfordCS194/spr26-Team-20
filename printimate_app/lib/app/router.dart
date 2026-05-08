@@ -5,6 +5,8 @@ import '../features/auth/auth_controller.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/home/home_shell.dart';
 import '../features/onboarding/intro_screen.dart';
+import '../features/onboarding/profile_screen.dart';
+import '../features/onboarding/printer_setup_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authStateProvider);
@@ -15,6 +17,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
       const legacy = {'/profile', '/send', '/history'};
       if (legacy.contains(loc)) return loggedIn ? '/home' : '/intro';
+      
+      // Allow onboarding routes for logged-in users
+      final isOnboarding = loc.startsWith('/onboarding');
+      if (isOnboarding && loggedIn) return null;
+      
       final publicRoute = loc == '/intro' || loc == '/auth';
       if (!loggedIn && !publicRoute) return '/intro';
       if (loggedIn && publicRoute) return '/home';
@@ -23,6 +30,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/intro', builder: (ctx, st) => const IntroScreen()),
       GoRoute(path: '/auth', builder: (ctx, st) => const SignInScreen()),
+      GoRoute(path: '/onboarding/profile', builder: (ctx, st) => const ProfileScreen()),
+      GoRoute(path: '/onboarding/printer', builder: (ctx, st) => const PrinterSetupScreen()),
       GoRoute(path: '/home', builder: (ctx, st) => const HomeShell()),
     ],
   );
