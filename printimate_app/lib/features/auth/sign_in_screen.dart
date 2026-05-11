@@ -17,6 +17,28 @@ class SignInScreen extends ConsumerStatefulWidget {
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   bool _busy = false;
   String? _error;
+  bool _isNewUser = false;
+
+  bool _isFirstTimeUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      debugPrint('=== _isFirstTimeUser: No user found ===');
+      return false;
+    }
+    final createdAt = user.metadata.creationTime;
+    final lastSignInAt = user.metadata.lastSignInTime;
+    debugPrint('=== _isFirstTimeUser: createdAt=$createdAt, lastSignInAt=$lastSignInAt ===');
+    if (createdAt == null || lastSignInAt == null) {
+      debugPrint('=== _isFirstTimeUser: Missing metadata ===');
+      return false;
+    }
+    final diff = createdAt.difference(lastSignInAt).abs().inSeconds;
+    debugPrint('=== _isFirstTimeUser: Time diff=$diff seconds ===');
+    // If account was created within 2 seconds of last sign-in, it's a new account
+    final isNew = diff <= 2;
+    debugPrint('=== _isFirstTimeUser: Result=$isNew ===');
+    return isNew;
+  }
 
   Future<void> _run(Future<void> Function() action) async {
     setState(() {
@@ -25,7 +47,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     });
     try {
       await action();
-      if (mounted) context.go('/home');
+      if (mounted) {
+        _isNewUser = _isFirstTimeUser();
+        debugPrint('=== Sign in complete. Is new user: $_isNewUser ===');
+        final route = _isNewUser ? '/onboarding/profile' : '/home';
+        debugPrint('Navigating to: $route');
+        context.go(route);
+      }
     } on FirebaseAuthException catch (e) {
       if (e.code == 'cancelled') return;
       if (mounted) setState(() => _error = e.message ?? e.code);
@@ -46,7 +74,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       builder: (_) => _EmailAuthSheet(controller: ctl),
     );
     if (result == 'ok' && mounted) {
-      context.go('/home');
+      _isNewUser = _isFirstTimeUser();
+      final route = _isNewUser ? '/onboarding/profile' : '/home';
+      context.go(route);
     } else if (result != null && result.isNotEmpty && result != 'ok') {
       if (mounted) setState(() => _error = result);
     }

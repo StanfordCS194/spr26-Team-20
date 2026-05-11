@@ -2,8 +2,9 @@
 
 import express from "express";
 import type { Request, Response } from "express";
+import cors from "cors";
 import { networkInterfaces } from "node:os";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,11 +16,14 @@ import type { MessageDocument } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const serviceAccountPath = join(
-  __dirname,
-  "env",
-  "printimate-44033-firebase-adminsdk-fbsvc-c045911551.json"
-);
+const envDir = join(__dirname, "env");
+const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
+
+if (envFiles.length === 0) {
+  throw new Error("No JSON files found in env directory");
+}
+
+const serviceAccountPath = join(envDir, envFiles[0]);
 
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
 
@@ -32,6 +36,7 @@ const db = getFirestore(adminApp);
 const app = express();
 const port = 3000;
 
+app.use(cors());
 app.use(express.json());
 
 type Message = {
