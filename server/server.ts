@@ -134,7 +134,7 @@ app.get("/messages", async (req, res) => {
 
     //If no messages are found then we want to return a 404 error.
     if (messages.length === 0) {
-      res.status(404).send("Message not found");
+      res.status(200).send("Message not found");
       return;
     }
 
