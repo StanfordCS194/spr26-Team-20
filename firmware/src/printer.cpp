@@ -172,8 +172,10 @@ bool printer_fetchAndPrintMessages(Printer &p) {
             }
         }
 
-        printer_printMessage(p, msg);
-        printed++;
+        if (!msg.printed) {
+            printer_printMessage(p, msg);
+            printed++;
+        }
     }
 
     PRINTIMATE_LOG_I("Printer: printed %d message(s)", printed);
