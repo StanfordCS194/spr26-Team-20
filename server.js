@@ -9,19 +9,23 @@ import { getFirestore } from "firebase-admin/firestore";
 import { Collections } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const envDir = join(__dirname, "env");
-const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
-if (envFiles.length === 0) {
-    throw new Error("No JSON files found in env directory");
+function getServiceAccount() {
+    const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
+    if (b64) {
+        const json = Buffer.from(b64, "base64").toString("utf8");
+        console.log("Decoded service account JSON:", json);
+        return JSON.parse(json);
+    }
+    // Optional local fallback for dev only
+    throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
 }
-//const serviceAccountPath = join(envDir, envFiles[0]);
-const serviceAccount = JSON.parse(readFileSync("env/printimate-44033-firebase-adminsdk-fbsvc-c045911551.json", "utf-8"));
+const serviceAccount = getServiceAccount();
 const adminApp = initializeApp({
     credential: cert(serviceAccount),
 });
 const db = getFirestore(adminApp);
 const app = express();
-const port = 3000;
+const port = process.env.PORT;
 app.use(express.json());
 var messages = {};
 app.post("/send", (req, res) => {

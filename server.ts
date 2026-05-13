@@ -21,6 +21,7 @@ function getServiceAccount(): ServiceAccount {
   const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
   if (b64) {
     const json = Buffer.from(b64, "base64").toString("utf8");
+    console.log("Decoded service account JSON:", json);
     return JSON.parse(json) as ServiceAccount;
   }
 
@@ -36,7 +37,7 @@ const adminApp = initializeApp({
 const db = getFirestore(adminApp);
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT;
 
 app.use(express.json());
 
