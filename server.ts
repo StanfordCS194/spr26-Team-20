@@ -8,22 +8,26 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { initializeApp, cert } from "firebase-admin/app";
+import type { ServiceAccount } from "firebase-admin"
 import { getFirestore } from "firebase-admin/firestore";
 
 import { Collections } from "./database_names.js";
 import type { MessageDocument } from "./database_names.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const envDir = join(__dirname, "env");
-const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
+function getServiceAccount(): ServiceAccount {
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
+  if (b64) {
+    const json = Buffer.from(b64, "base64").toString("utf8");
+    return JSON.parse(json) as ServiceAccount;
+  }
 
-const serviceAccountFile = envFiles.find(() => true);
-if (!serviceAccountFile) {
-  throw new Error("No JSON files found in env directory");
+  // Optional local fallback for dev only
+  throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
 }
-const serviceAccountPath = join(envDir, serviceAccountFile);
-const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
+const serviceAccount = getServiceAccount();
 
 const adminApp = initializeApp({
   credential: cert(serviceAccount),
