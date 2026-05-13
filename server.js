@@ -1,7 +1,7 @@
 // @ts-check
 import express from "express";
 import { networkInterfaces } from "node:os";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initializeApp, cert } from "firebase-admin/app";
@@ -9,8 +9,13 @@ import { getFirestore } from "firebase-admin/firestore";
 import { Collections } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const serviceAccountPath = join(__dirname, "env", "printimate-44033-firebase-adminsdk-fbsvc-c045911551.json");
-const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
+const envDir = join(__dirname, "env");
+const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
+if (envFiles.length === 0) {
+    throw new Error("No JSON files found in env directory");
+}
+//const serviceAccountPath = join(envDir, envFiles[0]);
+const serviceAccount = JSON.parse(readFileSync("env/printimate-44033-firebase-adminsdk-fbsvc-c045911551.json", "utf-8"));
 const adminApp = initializeApp({
     credential: cert(serviceAccount),
 });
@@ -74,7 +79,7 @@ app.get("/messages", async (req, res) => {
         });
         //If no messages are found then we want to return a 404 error.
         if (messages.length === 0) {
-            res.status(404).send("Message not found");
+            res.status(200).send("Message not found");
             return;
         }
         //We have all the messages this printer has recieved, we want to filter out the messages that have already been printed and return the rest.
@@ -233,6 +238,55 @@ app.post("/accept-permission-request", async (req, res) => {
         friendedPids: friendedPids,
     });
     res.status(200).send("Permission request accepted");
+});
+app.post("/reject-permission-request", async (req, res) => {
+    let ownersUid = req.body.ownersUid;
+    let pid = req.body.pid;
+    let requestersUid = req.body.requestersUid;
+    //First we need to check if the ownerUid is actually the owner of this printer.
+    let userDoc = await db.collection(Collections.users).doc(ownersUid).get();
+    if (!userDoc.exists) {
+        res.status(404).send("Owner user not found");
+        return;
+    }
+    //Check if the owner actually owns this printer
+    let userData = userDoc.data();
+    let ownedPids = [];
+    if (userData && userData.ownedPids) {
+        ownedPids = userData.ownedPids;
+        if (!ownedPids.includes(pid)) {
+            res.status(403).send("You do not have permission to reject requests for this printer");
+            return;
+        }
+    }
+    let request = await db.collection(Collections.permissionRequests).doc(pid).get();
+    if (!request.exists) {
+        res.status(404).send("No permission requests found for this printer");
+        return;
+    }
+    //Check if the requester is actually in the list of permission requests for this printer.
+    let requestData = request.data();
+    let fromUidList = [];
+    console.log("Request data:", requestData);
+    if (requestData && requestData.fromUid) {
+        fromUidList = requestData.fromUid;
+        if (!fromUidList.includes(requestersUid)) {
+            res.status(404).send("This user did not request permission for this printer");
+            return;
+        }
+        // Remove the rejected requester from pending permission requests
+        const updatedFromUidList = fromUidList.filter((pendingUid) => pendingUid !== requestersUid);
+        // If there are no more pending requests, delete the permission request document; otherwise, update it with the remaining requests
+        if (updatedFromUidList.length === 0) {
+            await db.collection(Collections.permissionRequests).doc(pid).delete();
+        }
+        else {
+            await db.collection(Collections.permissionRequests).doc(pid).update({
+                fromUid: updatedFromUidList,
+            });
+        }
+    }
+    res.status(200).send("Permission request rejected");
 });
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);

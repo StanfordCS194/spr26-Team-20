@@ -2,7 +2,6 @@
 
 import express from "express";
 import type { Request, Response } from "express";
-import cors from "cors";
 import { networkInterfaces } from "node:os";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -19,12 +18,11 @@ const __dirname = dirname(__filename);
 const envDir = join(__dirname, "env");
 const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
 
-if (envFiles.length === 0) {
+const serviceAccountFile = envFiles.find(() => true);
+if (!serviceAccountFile) {
   throw new Error("No JSON files found in env directory");
 }
-
-const serviceAccountPath = join(envDir, envFiles[0]);
-
+const serviceAccountPath = join(envDir, serviceAccountFile);
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
 
 const adminApp = initializeApp({
@@ -36,7 +34,6 @@ const db = getFirestore(adminApp);
 const app = express();
 const port = 3000;
 
-app.use(cors());
 app.use(express.json());
 
 type Message = {
