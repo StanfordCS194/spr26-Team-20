@@ -20,9 +20,9 @@ enum class BootState {
     CheckCredentials,
     Provisioning,
     ConnectingWifi,
-    Registering,
+//    Registering,
     Ready,
-    Reconnecting,
+//    Reconnecting,
 };
 
 static BootState g_state = BootState::Boot;
@@ -65,8 +65,18 @@ void setup() {
 }
 
 void loop() {
-    checkResetButton();
+    static uint32_t lastHeartbeatMs = 0;
+    if (millis() - lastHeartbeatMs > 2000) {
+        Serial.printf("HB s=%d w=%d r=%d c=%d\n",
+                      (int)g_state,
+                      (int)WiFi.status(),
+                      (int)WiFi.RSSI(),
+                      g_wifiRetryCount);
+        lastHeartbeatMs = millis();
+    }
 
+
+    checkResetButton();
     switch (g_state) {
         case BootState::Boot:
             // Unreachable after setup(); guard just in case.
@@ -97,14 +107,16 @@ void loop() {
                                  WiFi.localIP().toString().c_str());
                 g_wifiRetryCount = 0;
                 // TODO: check NVS for device token; skip to Ready if present.
-                transitionTo(BootState::Registering);
+                transitionTo(BootState::Ready);
+//                transitionTo(BootState::Registering);
             } else if (millis() - g_lastRetryMs > backoffMs(g_wifiRetryCount)) {
                 if (g_wifiRetryCount >= PRINTIMATE_WIFI_MAX_RETRIES) {
                     PRINTIMATE_LOG_W("WiFi creds look stale, falling back to provisioning");
                     transitionTo(BootState::Provisioning);
                 } else {
-                    PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
-                                     g_wifiRetryCount + 1);
+//                    PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
+//                                     g_wifiRetryCount + 1);
+                    Serial.printf("RETRY %d\n", g_wifiRetryCount + 1);
                     WiFi.disconnect(false, false);
                     WiFi.mode(WIFI_STA);
                     // No SSID/password args: WiFi.begin() without arguments
@@ -118,6 +130,8 @@ void loop() {
             break;
         }
 
+        // skipping registering; hardcoding PID for now
+        /*
         case BootState::Registering:
             // TODO: call backend /devices/register; store token in NVS.
             // Stub: pretend it succeeded after a moment.
@@ -125,6 +139,7 @@ void loop() {
             delay(500);
             transitionTo(BootState::Ready);
             break;
+        */
 
         case BootState::Ready:
             // TODO: printer_fetchAndPrintMessages(Printer &printer)
@@ -132,12 +147,14 @@ void loop() {
             PRINTIMATE_LOG_I("Ready, handing control to printer");
             bogusPrint();
             PRINTIMATE_LOG_I("Printer returned control. (Re)ConnectingWifi");
+            delay(1000);
             transitionTo(BootState::ConnectingWifi);
             break;
 
-        case BootState::Reconnecting:
-            // TODO: retry WiFi connection; return to Ready on success.
-            break;
+//        currently handling with ConnectingWifi. will eventually remove once sure not needed
+//        case BootState::Reconnecting:
+//            // TODO: retry WiFi connection; return to Ready on success.
+//            break;
     }
 
     // Keep loop() cooperative — yield to FreeRTOS so WiFi/TCP tasks run.
@@ -164,7 +181,7 @@ static void onStateEntry(BootState s) {
             break;
         case BootState::ConnectingWifi:
             WiFi.mode(WIFI_STA);
-            g_wifiRetryCount = 0;
+//            g_wifiRetryCount = 0;
             g_lastRetryMs = 0;  // force an immediate first attempt
             // TODO: pulse blue LED
             break;
@@ -226,15 +243,16 @@ static const char* stateName(BootState s) {
         case BootState::CheckCredentials: return "CheckCredentials";
         case BootState::Provisioning:     return "Provisioning";
         case BootState::ConnectingWifi:   return "ConnectingWifi";
-        case BootState::Registering:      return "Registering";
+//        case BootState::Registering:      return "Registering";
         case BootState::Ready:            return "Ready";
-        case BootState::Reconnecting:     return "Reconnecting";
+//        case BootState::Reconnecting:     return "Reconnecting";
     }
     return "?";
 }
 
 static void bogusPrint() {
-    while (WiFi.status() == WL_CONNECTED) {
-        delay(5);
+    uint32_t start = millis();
+    while (WiFi.status() == WL_CONNECTED && (millis() - start) < 5000) {
+        delay(50);
     }
 }
