@@ -53,10 +53,6 @@
 #define PRINTIMATE_MAX_TEXT_CHARS     500
 #define PRINTIMATE_MAX_IMAGE_BYTES    (200 * 1024)  // 200 KB after 1-bit dither
 
-// ---- MQTT -------------------------------------------------------------------
-#define PRINTIMATE_MQTT_KEEPALIVE_SEC 60
-#define PRINTIMATE_MQTT_BUFFER_SIZE   2048   // envelope only; images fetched via HTTPS
-
 // ---- Debug helpers ----------------------------------------------------------
 // Use PRINTIMATE_LOG_* rather than Serial.print directly so we can route logs
 // (e.g., also to a ring buffer for coredump) in one place later.
