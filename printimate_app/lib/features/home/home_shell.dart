@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../history/history_screen.dart';
@@ -39,16 +40,52 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ScrollConfiguration(
-        behavior: const _AnyDeviceScrollBehavior(),
-        child: PageView(
-          controller: _controller,
-          physics: const ClampingScrollPhysics(),
-          onPageChanged: (i) => setState(() => _index = i),
-          children: const [
-            HistoryScreen(),
-            SendScreen(),
-            ProfileScreen(),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // Slim top bar with an "+ add printer" affordance on the right.
+            SizedBox(
+              height: 44,
+              child: Row(
+                children: [
+                  const SizedBox(width: 16),
+                  Text(
+                    _tabs[_index],
+                    style: const TextStyle(
+                      fontFamily: 'Courier',
+                      color: PrintimateColors.textDim,
+                      fontSize: 12,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const Spacer(),
+                  Tooltip(
+                    message: 'Add another printer',
+                    child: IconButton(
+                      icon: const Icon(Icons.add, color: PrintimateColors.text),
+                      onPressed: () => context.push('/provisioning'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: PrintimateColors.border),
+            Expanded(
+              child: ScrollConfiguration(
+                behavior: const _AnyDeviceScrollBehavior(),
+                child: PageView(
+                  controller: _controller,
+                  physics: const ClampingScrollPhysics(),
+                  onPageChanged: (i) => setState(() => _index = i),
+                  children: const [
+                    HistoryScreen(),
+                    SendScreen(),
+                    ProfileScreen(),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

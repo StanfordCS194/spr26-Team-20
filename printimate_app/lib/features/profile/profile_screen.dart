@@ -8,7 +8,9 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/theme.dart';
+import '../../services/app_preferences.dart';
 import '../auth/auth_controller.dart';
+import '../onboarding/onboarding_state.dart';
 import 'profile_repository.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -78,6 +80,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _resetApp() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: PrintimateColors.surface,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text('RESET APP?',
+            style: Theme.of(context).textTheme.titleLarge),
+        content: const Text(
+          'Signs you out, clears the saved printer, and replays the intro '
+          'tour on next launch. Use this for demos and testing.',
+          style: TextStyle(color: PrintimateColors.textDim),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('CANCEL',
+                style: TextStyle(color: PrintimateColors.textDim)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('RESET',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await ref.read(appPreferencesProvider).clearAll();
+    ref.read(onboardingProvider.notifier).setPrinterId('');
+    await ref.read(authControllerProvider).signOut();
+  }
+
   Future<void> _signOut() async {
     await ref.read(authControllerProvider).signOut();
     if (mounted) context.go('/intro');
@@ -144,6 +179,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       : providerIds.map(_prettyProvider).join(', '),
                 ),
                 const SizedBox(height: 32),
+                OutlinedButton(
+                  onPressed: () => context.push('/provisioning'),
+                  child: const Text('ADD A PRINTER  +'),
+                ),
+                const SizedBox(height: 16),
                 if (_error != null) ...[
                   Text(_error!,
                       textAlign: TextAlign.center,
@@ -153,6 +193,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 OutlinedButton(
                   onPressed: _signOut,
                   child: const Text('SIGN OUT  →'),
+                ),
+                const SizedBox(height: 32),
+                const Divider(color: PrintimateColors.border, height: 1),
+                const SizedBox(height: 16),
+                Text(
+                  'DEVELOPER',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: PrintimateColors.textDim,
+                        letterSpacing: 2,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: _resetApp,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: PrintimateColors.border),
+                  ),
+                  child: const Text('RESET APP  ⟲'),
                 ),
               ],
             ),
