@@ -1,0 +1,31 @@
+<svg width="680" height="680" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="680" height="680" fill="#0a0a0a"/>
+  <g transform="translate(0, 135)">
+    <!-- Paper outline: sides -->
+    <line x1="230" y1="48" x2="230" y2="286" stroke="#ffffff" stroke-width="1.5"/>
+    <line x1="450" y1="48" x2="450" y2="286" stroke="#ffffff" stroke-width="1.5"/>
+
+    <!-- Torn top edge -->
+    <polyline points="230,48 244,32 258,48 272,32 286,48 300,32 314,48 328,32 342,48 356,32 370,48 384,32 398,48 412,32 426,48 440,32 450,44" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+
+    <!-- Torn bottom edge -->
+    <polyline points="230,286 244,302 258,286 272,302 286,286 300,302 314,286 328,302 342,286 356,302 370,286 384,302 398,286 412,302 426,286 440,302 450,290" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+
+    <!-- Dashed receipt lines (top) -->
+    <line x1="230" y1="78" x2="450" y2="78" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <line x1="230" y1="92" x2="450" y2="92" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+
+    <!-- Smiley -->
+    <circle cx="340" cy="185" r="68" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+    <circle cx="315" cy="168" r="7" fill="#ffffff"/>
+    <circle cx="365" cy="168" r="7" fill="#ffffff"/>
+    <path d="M310 198 Q340 228 370 198" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Dashed receipt lines (bottom) -->
+    <line x1="230" y1="268" x2="450" y2="268" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <line x1="230" y1="282" x2="450" y2="282" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+
+    <!-- Wordmark -->
+    <text x="340" y="355" text-anchor="middle" fill="#ffffff" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif" font-size="38" font-weight="500">printimate</text>
+  </g>
+</svg>

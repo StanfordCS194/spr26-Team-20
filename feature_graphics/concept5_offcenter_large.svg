@@ -1,0 +1,21 @@
+<svg width="1024" height="500" viewBox="0 0 1024 500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="500" fill="#0a0a0a"/>
+  <!-- Large receipt on right -->
+  <g transform="translate(720, 70)">
+    <line x1="0" y1="0" x2="0" y2="320" stroke="#ffffff" stroke-width="1.6"/>
+    <line x1="240" y1="0" x2="240" y2="320" stroke="#ffffff" stroke-width="1.6"/>
+    <polyline points="0,0 15,-17 30,0 45,-17 60,0 75,-17 90,0 105,-17 120,0 135,-17 150,0 165,-17 180,0 195,-17 210,0 225,-17 240,-4" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/>
+    <polyline points="0,320 15,337 30,320 45,337 60,320 75,337 90,320 105,337 120,320 135,337 150,320 165,337 180,320 195,337 210,320 225,337 240,324" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/>
+    <line x1="0" y1="40" x2="240" y2="40" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <line x1="0" y1="56" x2="240" y2="56" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <circle cx="120" cy="180" r="80" fill="none" stroke="#ffffff" stroke-width="1.6"/>
+    <circle cx="92" cy="160" r="8" fill="#ffffff"/>
+    <circle cx="148" cy="160" r="8" fill="#ffffff"/>
+    <path d="M88 196 Q120 232 152 196" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="0" y1="298" x2="240" y2="298" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <line x1="0" y1="282" x2="240" y2="282" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+  </g>
+  <!-- Stacked wordmark on left -->
+  <text x="80" y="240" fill="#ffffff" font-family="-apple-system, system-ui, 'Segoe UI', Helvetica, sans-serif" font-size="110" font-weight="500" letter-spacing="-2">print</text>
+  <text x="80" y="350" fill="#ffffff" font-family="-apple-system, system-ui, 'Segoe UI', Helvetica, sans-serif" font-size="110" font-weight="500" letter-spacing="-2">imate</text>
+</svg>
