@@ -12,11 +12,12 @@
 #include "config.h"
 #include "pins.h"
 #include "provisioning.h"
-// #include "printer.h"       // Niklas will flesh out
+#include "printer.h"
 // #include "mqtt_client.h"   // stub for now
 
 // ---- State machine ----------------------------------------------------------
-enum class BootState {
+enum class BootState
+{
     Boot,
     CheckCredentials,
     Provisioning,
@@ -29,9 +30,11 @@ enum class BootState {
 static BootState g_state = BootState::Boot;
 static BootState g_prevState = BootState::Boot;
 
+static Printer g_printer;
+
 // Retry tracking for CONNECTING_WIFI / REGISTERING.
-static int      g_wifiRetryCount = 0;
-static uint32_t g_lastRetryMs    = 0;
+static int g_wifiRetryCount = 0;
+static uint32_t g_lastRetryMs = 0;
 
 // Reset button tracking.
 static uint32_t g_buttonDownSinceMs = 0;
@@ -43,14 +46,15 @@ static void onStateExit(BootState s);
 static void transitionTo(BootState next);
 static void checkResetButton();
 static uint32_t backoffMs(int attempt);
-static const char* stateName(BootState s);
+static const char *stateName(BootState s);
 
 // =============================================================================
 // Arduino entry points
 // =============================================================================
-void setup() {
+void setup()
+{
     Serial.begin(PRINTIMATE_SERIAL_BAUD);
-    delay(200);  // give the USB-serial bridge a moment to come up
+    delay(200); // give the USB-serial bridge a moment to come up
     Serial.println();
     Serial.println(F("=== Printimate firmware booting ==="));
     Serial.print(F("Version: "));
@@ -62,74 +66,103 @@ void setup() {
     transitionTo(BootState::CheckCredentials);
 }
 
-void loop() {
+void loop()
+{
     checkResetButton();
 
-    switch (g_state) {
-        case BootState::Boot:
-            // Unreachable after setup(); guard just in case.
-            transitionTo(BootState::CheckCredentials);
-            break;
+    switch (g_state)
+    {
+    case BootState::Boot:
+        // Unreachable after setup(); guard just in case.
+        transitionTo(BootState::CheckCredentials);
+        break;
 
-        case BootState::CheckCredentials: {
-            // WiFiProv stores Wi-Fi credentials in the IDF's own NVS namespace.
-            // Ask the provisioning module rather than reading NVS directly.
-            bool hasCreds = provisioning_hasStoredCredentials();
-            transitionTo(hasCreds ? BootState::ConnectingWifi
-                                  : BootState::Provisioning);
-            break;
+    case BootState::CheckCredentials:
+    {
+        // WiFiProv stores Wi-Fi credentials in the IDF's own NVS namespace.
+        // Ask the provisioning module rather than reading NVS directly.
+        bool hasCreds = provisioning_hasStoredCredentials();
+        transitionTo(hasCreds ? BootState::ConnectingWifi
+                              : BootState::Provisioning);
+        break;
+    }
+
+    case BootState::Provisioning:
+        // All work happens in provisioning.cpp. Poll for completion.
+        provisioning_loop();
+        if (provisioning_isComplete())
+        {
+            transitionTo(BootState::ConnectingWifi);
         }
+        break;
 
-        case BootState::Provisioning:
-            // All work happens in provisioning.cpp. Poll for completion.
-            provisioning_loop();
-            if (provisioning_isComplete()) {
-                transitionTo(BootState::ConnectingWifi);
-            }
-            break;
-
-        case BootState::ConnectingWifi: {
-            wl_status_t ws = WiFi.status();
-            if (ws == WL_CONNECTED) {
-                PRINTIMATE_LOG_I("WiFi connected, IP=%s",
-                                 WiFi.localIP().toString().c_str());
-                g_wifiRetryCount = 0;
-                // TODO: check NVS for device token; skip to Ready if present.
-                transitionTo(BootState::Registering);
-            } else if (millis() - g_lastRetryMs > backoffMs(g_wifiRetryCount)) {
-                if (g_wifiRetryCount >= PRINTIMATE_WIFI_MAX_RETRIES) {
-                    PRINTIMATE_LOG_W("WiFi creds look stale, falling back to provisioning");
-                    transitionTo(BootState::Provisioning);
-                } else {
-                    PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
-                                     g_wifiRetryCount + 1);
-                    // No SSID/password args: WiFi.begin() without arguments
-                    // pulls credentials from the IDF's NVS, where WiFiProv
-                    // stored them during provisioning.
-                    WiFi.begin();
-                    g_wifiRetryCount++;
-                    g_lastRetryMs = millis();
-                }
-            }
-            break;
+    case BootState::ConnectingWifi:
+    {
+        wl_status_t ws = WiFi.status();
+        if (ws == WL_CONNECTED)
+        {
+            PRINTIMATE_LOG_I("WiFi connected, IP=%s",
+                             WiFi.localIP().toString().c_str());
+            g_wifiRetryCount = 0;
+            // TODO: check NVS for device token; skip to Ready if present.
+            transitionTo(BootState::Registering);
         }
+        else if (millis() - g_lastRetryMs > backoffMs(g_wifiRetryCount))
+        {
+            if (g_wifiRetryCount >= PRINTIMATE_WIFI_MAX_RETRIES)
+            {
+                PRINTIMATE_LOG_W("WiFi creds look stale, falling back to provisioning");
+                transitionTo(BootState::Provisioning);
+            }
+            else
+            {
+                PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
+                                 g_wifiRetryCount + 1);
+                // No SSID/password args: WiFi.begin() without arguments
+                // pulls credentials from the IDF's NVS, where WiFiProv
+                // stored them during provisioning.
+                WiFi.begin();
+                g_wifiRetryCount++;
+                g_lastRetryMs = millis();
+            }
+        }
+        break;
+    }
 
-        case BootState::Registering:
-            // TODO: call backend /devices/register; store token in NVS.
-            // Stub: pretend it succeeded after a moment.
-            PRINTIMATE_LOG_I("Registering with backend (stub)");
-            delay(500);
-            transitionTo(BootState::Ready);
-            break;
+    case BootState::Registering:
+        // TODO: call backend /devices/register; store token in NVS.
+        // Stub: pretend it succeeded after a moment.
+        PRINTIMATE_LOG_I("Registering with backend (stub)");
+        delay(500);
+        transitionTo(BootState::Ready);
+        break;
 
-        case BootState::Ready:
-            // TODO: mqtt_client_loop() + printer_handleJobs();
-            // If MQTT drops, transition to Reconnecting.
-            break;
+    case BootState::Ready:
+    {
+        // TODO: mqtt_client_loop(); transition to Reconnecting on MQTT drop.
+        static uint32_t s_lastPrintFetchMs = 0;
+        if (millis() - s_lastPrintFetchMs >= 5000)
+        {
+            s_lastPrintFetchMs = millis();
+            printer_fetchAndPrintMessages(g_printer);
 
-        case BootState::Reconnecting:
-            // TODO: retry MQTT with backoff; return to Ready on success.
-            break;
+            // Too many consecutive fetch failures likely means we've lost
+            // network connectivity; fall back to Reconnecting so we can re-establish a Wi-Fi
+            // connection
+            if (g_printer.consecutiveErrors >= PRINTIMATE_PRINTER_MAX_CONSECUTIVE_ERRORS)
+            {
+                PRINTIMATE_LOG_W("Printer: %d consecutive errors, reconnecting",
+                                 g_printer.consecutiveErrors);
+                transitionTo(BootState::Reconnecting);
+            }
+        }
+        break;
+    }
+
+    case BootState::Reconnecting:
+        // For now, just a stub that goes back to ConnectingWifi.
+        transitionTo(BootState::ConnectingWifi);
+        break;
     }
 
     // Keep loop() cooperative — yield to FreeRTOS so WiFi/TCP tasks run.
@@ -139,8 +172,10 @@ void loop() {
 // =============================================================================
 // State machine plumbing
 // =============================================================================
-static void transitionTo(BootState next) {
-    if (next == g_state) return;
+static void transitionTo(BootState next)
+{
+    if (next == g_state)
+        return;
     PRINTIMATE_LOG_I("State: %s -> %s", stateName(g_state), stateName(next));
     onStateExit(g_state);
     g_prevState = g_state;
@@ -148,79 +183,106 @@ static void transitionTo(BootState next) {
     onStateEntry(next);
 }
 
-static void onStateEntry(BootState s) {
-    switch (s) {
-        case BootState::Provisioning:
-            provisioning_begin();
-            // TODO: pulse red LED
-            break;
-        case BootState::ConnectingWifi:
-            WiFi.mode(WIFI_STA);
-            g_wifiRetryCount = 0;
-            g_lastRetryMs = 0;  // force an immediate first attempt
-            // TODO: pulse blue LED
-            break;
-        case BootState::Ready:
-            // TODO: solid green LED; connect MQTT
-            break;
-        default: break;
+static void onStateEntry(BootState s)
+{
+    switch (s)
+    {
+    case BootState::Provisioning:
+        provisioning_begin();
+        // TODO: pulse red LED
+        break;
+    case BootState::ConnectingWifi:
+        WiFi.mode(WIFI_STA);
+        g_wifiRetryCount = 0;
+        g_lastRetryMs = 0; // force an immediate first attempt
+        // TODO: pulse blue LED
+        break;
+    case BootState::Ready:
+        printer_begin(g_printer);
+        g_printer.consecutiveErrors = 0;
+        // TODO: solid green LED; connect MQTT
+        break;
+    default:
+        break;
     }
 }
 
-static void onStateExit(BootState s) {
-    switch (s) {
-        case BootState::Provisioning:
-            provisioning_end();
-            break;
-        default: break;
+static void onStateExit(BootState s)
+{
+    switch (s)
+    {
+    case BootState::Provisioning:
+        provisioning_end();
+        break;
+    default:
+        break;
     }
 }
 
 // =============================================================================
 // Helpers
 // =============================================================================
-static void initPeripherals() {
+static void initPeripherals()
+{
     pinMode(PIN_STATUS_LED_R, OUTPUT);
     pinMode(PIN_STATUS_LED_G, OUTPUT);
     pinMode(PIN_STATUS_LED_B, OUTPUT);
     pinMode(PIN_BUZZER, OUTPUT);
     pinMode(PIN_RESET_BUTTON, INPUT_PULLUP);
-    // Printer UART init deferred to printer_begin() (Niklas).
+    // Printer UART init deferred to printer_begin()
 }
 
-static void checkResetButton() {
+static void checkResetButton()
+{
     bool pressed = (digitalRead(PIN_RESET_BUTTON) == LOW) ==
                    (PIN_RESET_BUTTON_ACTIVE_LOW != 0);
-    if (pressed) {
-        if (g_buttonDownSinceMs == 0) {
+    if (pressed)
+    {
+        if (g_buttonDownSinceMs == 0)
+        {
             g_buttonDownSinceMs = millis();
-        } else if (millis() - g_buttonDownSinceMs >= PRINTIMATE_RESET_HOLD_MS) {
+        }
+        else if (millis() - g_buttonDownSinceMs >= PRINTIMATE_RESET_HOLD_MS)
+        {
             PRINTIMATE_LOG_W("Reset button held; factory reset and reboot");
-            provisioning_factoryReset();   // wipes both our NVS and WiFiProv's
+            provisioning_factoryReset(); // wipes both our NVS and WiFiProv's
             delay(200);
             ESP.restart();
         }
-    } else {
+    }
+    else
+    {
         g_buttonDownSinceMs = 0;
     }
 }
 
 // Exponential backoff with a cap: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
-static uint32_t backoffMs(int attempt) {
+static uint32_t backoffMs(int attempt)
+{
     uint32_t ms = PRINTIMATE_WIFI_RETRY_BASE_MS << attempt;
-    if (ms > PRINTIMATE_WIFI_RETRY_MAX_MS) ms = PRINTIMATE_WIFI_RETRY_MAX_MS;
+    if (ms > PRINTIMATE_WIFI_RETRY_MAX_MS)
+        ms = PRINTIMATE_WIFI_RETRY_MAX_MS;
     return ms;
 }
 
-static const char* stateName(BootState s) {
-    switch (s) {
-        case BootState::Boot:             return "Boot";
-        case BootState::CheckCredentials: return "CheckCredentials";
-        case BootState::Provisioning:     return "Provisioning";
-        case BootState::ConnectingWifi:   return "ConnectingWifi";
-        case BootState::Registering:      return "Registering";
-        case BootState::Ready:            return "Ready";
-        case BootState::Reconnecting:     return "Reconnecting";
+static const char *stateName(BootState s)
+{
+    switch (s)
+    {
+    case BootState::Boot:
+        return "Boot";
+    case BootState::CheckCredentials:
+        return "CheckCredentials";
+    case BootState::Provisioning:
+        return "Provisioning";
+    case BootState::ConnectingWifi:
+        return "ConnectingWifi";
+    case BootState::Registering:
+        return "Registering";
+    case BootState::Ready:
+        return "Ready";
+    case BootState::Reconnecting:
+        return "Reconnecting";
     }
     return "?";
 }
