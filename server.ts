@@ -19,11 +19,12 @@ const __dirname = dirname(__filename);
 const envDir = join(__dirname, "env");
 const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
 
-if (envFiles.length === 0) {
+const envFile = envFiles[0];
+if (!envFile) {
   throw new Error("No JSON files found in env directory");
 }
 
-const serviceAccountPath = join(envDir, envFiles[0]);
+const serviceAccountPath = join(envDir, envFile);
 
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
 
