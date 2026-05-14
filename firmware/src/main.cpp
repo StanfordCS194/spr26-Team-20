@@ -65,6 +65,7 @@ void setup() {
 }
 
 void loop() {
+    /* for debugging
     static uint32_t lastHeartbeatMs = 0;
     if (millis() - lastHeartbeatMs > 2000) {
         Serial.printf("HB s=%d w=%d r=%d c=%d\n",
@@ -74,6 +75,7 @@ void loop() {
                       g_wifiRetryCount);
         lastHeartbeatMs = millis();
     }
+    */
 
 
     checkResetButton();
@@ -108,15 +110,17 @@ void loop() {
                 g_wifiRetryCount = 0;
                 // TODO: check NVS for device token; skip to Ready if present.
                 transitionTo(BootState::Ready);
+//                below is code vestige and kept in case registering ends up being necessary
 //                transitionTo(BootState::Registering);
             } else if (millis() - g_lastRetryMs > backoffMs(g_wifiRetryCount)) {
                 if (g_wifiRetryCount >= PRINTIMATE_WIFI_MAX_RETRIES) {
                     PRINTIMATE_LOG_W("WiFi creds look stale, falling back to provisioning");
                     transitionTo(BootState::Provisioning);
                 } else {
-//                    PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
-//                                     g_wifiRetryCount + 1);
-                    Serial.printf("RETRY %d\n", g_wifiRetryCount + 1);
+                    PRINTIMATE_LOG_I("WiFi connect attempt %d (using stored creds)",
+                                     g_wifiRetryCount + 1);
+//                    below for debugging
+//                    Serial.printf("RETRY %d\n", g_wifiRetryCount + 1);
                     WiFi.disconnect(false, false);
                     WiFi.mode(WIFI_STA);
                     // No SSID/password args: WiFi.begin() without arguments
