@@ -24,8 +24,6 @@
 // ---- Backend endpoints ------------------------------------------------------
 // Coordinate with Felipe for the real values once his backend is up.
 #define PRINTIMATE_API_BASE_URL  "https://api.printimate.example.com"
-#define PRINTIMATE_MQTT_HOST     "mqtt.printimate.example.com"
-#define PRINTIMATE_MQTT_PORT     8883   // TLS
 
 // ---- Dev-only registration token -------------------------------------------
 // Temporary until Felipe's pairing flow is wired up.

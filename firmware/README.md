@@ -11,7 +11,7 @@ ESP32 firmware for the Printimate thermal printer. Runs on an **ESP32 DevKit V1*
 - **Toolchain:** managed automatically by PlatformIO — don't install the Arduino
   IDE core separately; it'll cause confusion
 - **Style:** plain `.cpp` / `.h`, not `.ino`. Each module (provisioning,
-  printer, MQTT) has its own pair of files.
+  printer) has its own pair of files.
 
 ## One-time setup
 
@@ -97,7 +97,6 @@ printimate-firmware/
 | Boot state machine (`main.cpp`) | Carlos | Scaffold present; registering/ready to wire up |
 | Provisioning (`provisioning.cpp`) | Carlos | Stub; captive portal + NVS writes TBD |
 | Printer driver (`printer.cpp`) | Niklas | Not started |
-| MQTT client (`mqtt_client.cpp`) | TBD | Not started |
 | Backend API | Felipe | See separate repo |
 | Flutter app | Braedan | See separate repo |
 | UX / front-end | Luke | See separate repo |
