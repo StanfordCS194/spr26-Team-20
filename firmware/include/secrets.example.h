@@ -27,4 +27,4 @@
 
 // ---- Dev-only registration token -------------------------------------------
 // Temporary until Felipe's pairing flow is wired up.
-#define DEV_DEVICE_TOKEN      ""
+#define DEV_DEVICE_TOKEN      "printer1"

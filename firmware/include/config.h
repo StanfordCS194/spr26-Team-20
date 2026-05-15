@@ -47,11 +47,17 @@
 #define PRINTIMATE_NVS_KEY_POP       "ble_pop"
 #define PRINTIMATE_NVS_KEY_TOKEN     "dev_token"
 
+// ---- Printer connection health ----------------------------------------------
+// If this many consecutive fetch attempts fail, the device assumes connectivity
+// has been lost and transitions back to Reconnecting to re-establish the link.
+#define PRINTIMATE_PRINTER_MAX_CONSECUTIVE_ERRORS  10
+
 // ---- Message limits ---------------------------------------------------------
 // Enforced at firmware boundary; the backend should enforce these too so we
 // never receive anything larger. See Felipe's backend spec.
-#define PRINTIMATE_MAX_TEXT_CHARS     500
-#define PRINTIMATE_MAX_IMAGE_BYTES    (200 * 1024)  // 200 KB after 1-bit dither
+#define PRINTIMATE_MAX_TEXT_CHARS           500
+#define PRINTIMATE_MAX_IMAGE_BYTES          (200 * 1024)  // 200 KB after 1-bit dither
+#define PRINTIMATE_MAX_IMAGES_PER_MESSAGE   4
 
 // ---- Debug helpers ----------------------------------------------------------
 // Use PRINTIMATE_LOG_* rather than Serial.print directly so we can route logs
