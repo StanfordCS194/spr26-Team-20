@@ -1,0 +1,31 @@
+Printimate turns everyday messages into physical keepsakes.
+
+Plug in your Printimate printer, pair it from your phone in seconds, and your friends and family can send you notes, photos, and drawings that print out on real paper — right on your desk, fridge, or bedside table. No notifications. No infinite scroll. Just a small slip of paper from someone who was thinking of you.
+
+WHAT YOU CAN DO
+• Pair a printer over Bluetooth in under a minute.
+• Send messages to anyone whose printer you have permission to write to.
+• Receive notes, photos, and hand-drawn doodles from approved friends.
+• Approve or reject who can write to your printer — you stay in control.
+• Own more than one printer? Add as many as you like from a single account.
+
+WHY PRINTIMATE
+Most messaging apps are loud. They buzz, they pile up, they live behind a glass rectangle. Printimate is quiet. A message arrives, paper rolls out, and that's it — something you can hold, pin up, or tuck into a notebook. It's the warmth of a handwritten letter with the speed of a text.
+
+Perfect for:
+• Grandparents who want to hear from grandkids without learning a new app.
+• Long-distance friends and partners who miss leaving each other notes.
+• Roommates and families sharing one printer in the kitchen.
+• Anyone who's a little tired of screens.
+
+HOW IT WORKS
+1. Sign in and pair your Printimate printer over Bluetooth.
+2. Share your printer ID with the people you want to hear from.
+3. Approve their requests — they can now send you messages.
+4. Their words, pictures, and drawings print automatically when they hit send.
+
+PRIVACY
+Your messages are sent over a secure connection and only people you've approved can write to your printer. You can revoke access at any time.
+
+ABOUT THE PROJECT
+Printimate began as a student hardware-software project at Stanford with one question: what would messaging look like if it lived on paper instead of a screen? We built the printer, the firmware, and the app from scratch — and we'd love for you to be part of where it goes next.

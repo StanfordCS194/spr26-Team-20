@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,11 +12,12 @@ import 'package:http/http.dart' as http;
 
 
 import '../../app/theme.dart';
-import '../profile/profile_repository.dart';
+import '../auth/user_profile_repository.dart';
+import '../onboarding/onboarding_state.dart';
 import 'drawing_canvas.dart';
 
 const int _printerWidthPx = 384;
-const String _defaultServerUrl = 'http://localhost:3000';
+const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
 
 enum _Source { text, photo, draw }
 
@@ -162,7 +163,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     });
     try {
       Uint8List rawForPipeline;
-      String sourceLabel;
 
       switch (_source) {
         case _Source.text:
@@ -173,7 +173,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           }
           setState(() => _sendStatus = 'RENDERING TEXT...');
           rawForPipeline = await _renderTextToPng(text);
-          sourceLabel = 'text';
           break;
         case _Source.photo:
           if (_selectedRawBytes == null) {
@@ -181,7 +180,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
             return;
           }
           rawForPipeline = _selectedRawBytes!;
-          sourceLabel = 'photo';
           break;
         case _Source.draw:
           if (_drawingController.isEmpty) {
@@ -194,32 +192,39 @@ class _SendScreenState extends ConsumerState<SendScreen> {
             return;
           }
           rawForPipeline = drawing;
-          sourceLabel = 'drawing';
           break;
       }
 
       setState(() => _sendStatus = 'PROCESSING IMAGE...');
       final processed = await _processForReceiptPrinter(rawForPipeline);
 
+      final destinationPid = _printerIdCtl.text.trim().isNotEmpty
+          ? _printerIdCtl.text.trim()
+          : ref.read(onboardingProvider).printerId.trim();
+      if (destinationPid.isEmpty) {
+        setState(() => _error = 'Set a printer ID in onboarding first.');
+        return;
+      }
+
       setState(() => _sendStatus = 'UPLOADING...');
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final storageRef = ref
-          .read(firebaseStorageProvider)
-          .ref('messages/$uid/$timestamp.png');
-      await storageRef.putData(
-        processed.pngBytes,
-        SettableMetadata(
-          contentType: 'image/png',
-          customMetadata: {
-            'senderUid': uid,
-            'createdAtMs': '$timestamp',
-            'source': sourceLabel,
-            'widthPx': '${processed.width}',
-            'heightPx': '${processed.height}',
-          },
-        ),
-      );
+      final user = FirebaseAuth.instance.currentUser!;
+      final imageBase64 = base64Encode(processed.pngBytes);
+      final messageText = _source == _Source.text ? _messageCtl.text.trim() : '';
+
+      final docRef = await ref
+          .read(firestoreProvider)
+          .collection('printers')
+          .doc(destinationPid)
+          .collection('messages')
+          .add({
+            'authorUid': user.uid,
+            'authorName': user.displayName ?? '',
+            'destinationPid': destinationPid,
+            'sentTimestamp': FieldValue.serverTimestamp(),
+            'messageText': messageText,
+            'images': [imageBase64],
+            'printed': false,
+          });
 
       setState(() => _sendStatus = 'SENDING TO SERVER...');
       final printerId = _printerIdCtl.text.trim();
@@ -228,7 +233,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         return;
       }
 
-      final messageText = sourceLabel == 'text' ? _messageCtl.text : '[${sourceLabel.toUpperCase()}]';
       final currentUser = FirebaseAuth.instance.currentUser!;
 
       try {
@@ -256,7 +260,9 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       _clearImage();
       _drawingController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sent → messages/$uid/$timestamp.png')),
+        SnackBar(
+          content: Text('Sent → printers/$destinationPid/messages/${docRef.id}'),
+        ),
       );
     } catch (e) {
       if (mounted) setState(() => _error = 'Send failed: $e');
