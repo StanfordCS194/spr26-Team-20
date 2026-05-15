@@ -12,7 +12,7 @@ import type { ServiceAccount } from "firebase-admin"
 import { getFirestore } from "firebase-admin/firestore";
 
 import { Collections } from "./database_names.js";
-import type { MessageDocument } from "./database_names.js";
+import type { MessageDocument, MessageImage } from "./database_names.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,7 +47,7 @@ type Message = {
   authorName: string;
   sentTimestamp: Date;
   messageText: string;
-  images: string[];
+  images?: MessageImage | null;
   printed: boolean;
 
 };
@@ -65,7 +65,7 @@ type SendMessageRequest = {
     authorName: string;
     sentTimestamp: Date;
     messageText: string;
-    images: string[];
+  images?: MessageImage | null;
 }
 
 app.post("/send", (req, res) => {
@@ -87,7 +87,7 @@ app.post("/send", (req, res) => {
     authorName: body.authorName,
     sentTimestamp: new Date(),
     messageText: body.messageText,
-    images: body.images ?? [],
+    images: body.images ?? null,
     printed: false,
   };
 
@@ -129,7 +129,7 @@ app.get("/messages", async (req, res) => {
             ? data.sentTimestamp
             : data.sentTimestamp.toDate(),
         messageText: data.messageText,
-        images: data.images ?? [],
+        images: data.images ?? null,
         printed: data.printed,
       };
     });
