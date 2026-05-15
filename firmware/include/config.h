@@ -8,6 +8,47 @@
 // =============================================================================
 #pragma once
 
+// ---- Device identity --------------------------------------------------------
+// Hardcoded printer ID (PID). One per physical device. Burned into firmware
+// at flash time. We chose hardcoded PIDs (rather than backend-assigned) so
+// the app can call POST /setup/{pid} immediately after provisioning with no
+// intermediate handshake. See team sync notes 2026-04-XX.
+//
+#ifndef PRINTIMATE_PID
+#define PRINTIMATE_PID  "printer1"   // default
+#endif
+
+// ---- Provisioning (BLE) -----------------------------------------------------
+// The BLE service name is "PROV_<PID>". The app discovers devices by the
+// "PROV_" prefix and parses the PID out of the suffix — this lets the app
+// learn the PID without any custom protocomm endpoints or hardcoded mapping
+// tables. See provisioning.cpp::buildServiceName() for construction.
+//
+// Note: the PID is broadcast in cleartext during provisioning. PIDs are not
+// secrets (they're printed on the device, and surfaced to users in the app),
+// so this is acceptable. Don't extend this name to include sensitive data.
+
+// =============================================================================
+// DEMO SHORTCUT — REMOVE BEFORE ANY USER-FACING RELEASE
+// =============================================================================
+// For the CS194 demo we use a fixed proof-of-possession (PoP) compiled into
+// both firmware and the Flutter app. This means *any* phone running our app
+// build can pair with *any* of our printers. That's fine for a controlled
+// demo with 2-5 units in our hands; it would be a security hole in production.
+//
+// Production plan (deferred):
+//   - Each device generates a random PoP at first boot, persists in NVS
+//   - PoP is printed on a setup receipt along with a QR code containing
+//     {pid, pop, service_name}
+//   - App scans QR to extract PoP, then pairs
+//
+// To remove the shortcut:
+//   1. Restore the loadOrGeneratePoP() body in provisioning.cpp
+//   2. Add QR scanner to Flutter app (Braedan)
+//   3. Update provisioning_logQR() to print to thermal printer, not Serial
+// =============================================================================
+#define PRINTIMATE_DEMO_FIXED_POP  "printimate"
+
 // ---- Identity ---------------------------------------------------------------
 // PRINTIMATE_FIRMWARE_VERSION is injected by platformio.ini via -D.
 // Access via the macro; do not redefine here.
@@ -24,7 +65,7 @@
 // PoP = "proof of possession" — the device-specific shared secret the phone
 // must present during the SRP handshake. Per-device, generated at first
 // boot, persisted in NVS, printed on the receipt + as a QR code.
-#define PRINTIMATE_POP_LEN           8
+#define PRINTIMATE_POP_LEN           10
 
 // ---- WiFi connection retry/backoff -----------------------------------------
 #define PRINTIMATE_WIFI_MAX_RETRIES      5

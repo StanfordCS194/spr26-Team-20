@@ -12,7 +12,7 @@
 #include "config.h"
 #include "pins.h"
 #include "provisioning.h"
-// #include "printer.h"       // Niklas will flesh out
+#include "printer.h"       // Niklas will flesh out
 
 // ---- State machine ----------------------------------------------------------
 enum class BootState
@@ -21,9 +21,7 @@ enum class BootState
     CheckCredentials,
     Provisioning,
     ConnectingWifi,
-//    Registering,
     Ready,
-//    Reconnecting,
 };
 
 static BootState g_state = BootState::Boot;
@@ -83,7 +81,8 @@ void loop() {
 
 
     checkResetButton();
-    switch (g_state) {
+    switch (g_state)
+    {
         case BootState::Boot:
             // Unreachable after setup(); guard just in case.
             transitionTo(BootState::CheckCredentials);
@@ -97,26 +96,12 @@ void loop() {
                                   : BootState::Provisioning);
             break;
         }
-        break;
-
-    case BootState::ConnectingWifi:
-    {
-        wl_status_t ws = WiFi.status();
-        if (ws == WL_CONNECTED)
-        {
-            PRINTIMATE_LOG_I("WiFi connected, IP=%s",
-                             WiFi.localIP().toString().c_str());
-            g_wifiRetryCount = 0;
-            // TODO: check NVS for device token; skip to Ready if present.
-            transitionTo(BootState::Registering);
-        }
-        else if (millis() - g_lastRetryMs > backoffMs(g_wifiRetryCount))
-        {
-            if (g_wifiRetryCount >= PRINTIMATE_WIFI_MAX_RETRIES)
-            {
-                PRINTIMATE_LOG_W("WiFi creds look stale, falling back to provisioning");
-                transitionTo(BootState::Provisioning);
-            }
+        case BootState::Provisioning:
+            // All work happens in provisioning.cpp. Poll for completion.
+            provisioning_loop();
+            if (provisioning_isComplete()) {
+                transitionTo(BootState::ConnectingWifi);
+            }   
             break;
 
         case BootState::ConnectingWifi: {
@@ -148,7 +133,6 @@ void loop() {
                     g_lastRetryMs = millis();
                 }
             }
-        }
         break;
     }
 
@@ -280,9 +264,7 @@ static const char* stateName(BootState s) {
         case BootState::CheckCredentials: return "CheckCredentials";
         case BootState::Provisioning:     return "Provisioning";
         case BootState::ConnectingWifi:   return "ConnectingWifi";
-//        case BootState::Registering:      return "Registering";
         case BootState::Ready:            return "Ready";
-//        case BootState::Reconnecting:     return "Reconnecting";
     }
     return "?";
 }

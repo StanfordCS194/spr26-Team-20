@@ -166,9 +166,9 @@ void provisioning_logQR() {
     // and the `esp_provisioning_ble` Flutter package.
     PRINTIMATE_LOG_I(
         "Provisioning QR payload: "
-        "{\"ver\":\"v1\",\"name\":\"%s\",\"pop\":\"%s\","
+        "{\"ver\":\"v1\",\"name\":\"%s\",\"pid\":\"%s\",\"pop\":\"%s\","
         "\"transport\":\"ble\",\"security\":2}",
-        g_serviceName, g_pop
+        g_serviceName, PRINTIMATE_PID, g_pop
     );
     // Convenience: the same payload as a hosted QR URL Niklas can scan
     // during bring-up before the on-device QR printing is wired up.
@@ -189,34 +189,40 @@ void provisioning_logQR() {
 // by Espressif's reference apps and keeps the name short enough to fit in
 // the 31-byte BLE advertising packet.
 static void buildServiceName() {
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    snprintf(g_serviceName, sizeof(g_serviceName),
-             "PROV_%02X%02X", mac[4], mac[5]);
+    snprintf(g_serviceName, sizeof(g_serviceName), "PROV_%s", PRINTIMATE_PID);
 }
 
+// will do later if have time
+//
 // Per-device PoP. Generated once at first boot and persisted in NVS so it
 // survives reboots and matches the QR code we print for the recipient.
-static void loadOrGeneratePoP() {
-    Preferences prefs;
-    prefs.begin(PRINTIMATE_NVS_NAMESPACE, /*readOnly=*/false);
+//static void loadOrGeneratePoP() {
+//    Preferences prefs;
+//    prefs.begin(PRINTIMATE_NVS_NAMESPACE, /*readOnly=*/false);
+//
+//    String stored = prefs.getString(PRINTIMATE_NVS_KEY_POP, "");
+//    if (stored.length() == PRINTIMATE_POP_LEN) {
+//        strncpy(g_pop, stored.c_str(), sizeof(g_pop) - 1);
+//    } else {
+//        // Generate a fresh PoP. esp_random() is hardware-RNG backed.
+//        static const char alphabet[] =
+//            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // ambiguous chars removed
+//        const size_t alphabetLen = sizeof(alphabet) - 1;
+//        for (size_t i = 0; i < PRINTIMATE_POP_LEN; ++i) {
+//            g_pop[i] = alphabet[esp_random() % alphabetLen];
+//        }
+//        g_pop[PRINTIMATE_POP_LEN] = '\0';
+//        prefs.putString(PRINTIMATE_NVS_KEY_POP, g_pop);
+//        PRINTIMATE_LOG_I("Generated new PoP and stored in NVS");
+//    }
+//    prefs.end();
+//}
 
-    String stored = prefs.getString(PRINTIMATE_NVS_KEY_POP, "");
-    if (stored.length() == PRINTIMATE_POP_LEN) {
-        strncpy(g_pop, stored.c_str(), sizeof(g_pop) - 1);
-    } else {
-        // Generate a fresh PoP. esp_random() is hardware-RNG backed.
-        static const char alphabet[] =
-            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // ambiguous chars removed
-        const size_t alphabetLen = sizeof(alphabet) - 1;
-        for (size_t i = 0; i < PRINTIMATE_POP_LEN; ++i) {
-            g_pop[i] = alphabet[esp_random() % alphabetLen];
-        }
-        g_pop[PRINTIMATE_POP_LEN] = '\0';
-        prefs.putString(PRINTIMATE_NVS_KEY_POP, g_pop);
-        PRINTIMATE_LOG_I("Generated new PoP and stored in NVS");
-    }
-    prefs.end();
+static void loadOrGeneratePoP() {
+    // DEMO SHORTCUT: fixed PoP shared with the Flutter app. See config.h for
+    // the production plan that replaces this with per-device random PoPs.
+    strncpy(g_pop, PRINTIMATE_DEMO_FIXED_POP, sizeof(g_pop) - 1);
+    g_pop[sizeof(g_pop) - 1] = '\0';
 }
 
 // Single event sink for both Wi-Fi and provisioning events emitted by the
