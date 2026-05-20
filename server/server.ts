@@ -8,20 +8,27 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { initializeApp, cert } from "firebase-admin/app";
+import type { ServiceAccount } from "firebase-admin"
 import { getFirestore } from "firebase-admin/firestore";
 
 import { Collections } from "./database_names.js";
-import type { MessageDocument } from "./database_names.js";
+import type { MessageDocument, MessageImage } from "./database_names.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const serviceAccountPath = join(
-  __dirname,
-  "env",
-  "printimate-44033-firebase-adminsdk-fbsvc-c045911551.json"
-);
+function getServiceAccount(): ServiceAccount {
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
+  if (b64) {
+    const json = Buffer.from(b64, "base64").toString("utf8");
+    console.log("Decoded service account JSON:", json);
+    return JSON.parse(json) as ServiceAccount;
+  }
 
-const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
+  // Optional local fallback for dev only
+  throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
+}
+const serviceAccount = getServiceAccount();
 
 const adminApp = initializeApp({
   credential: cert(serviceAccount),
@@ -30,7 +37,7 @@ const adminApp = initializeApp({
 const db = getFirestore(adminApp);
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT;
 
 app.use(express.json());
 
@@ -40,7 +47,7 @@ type Message = {
   authorName: string;
   sentTimestamp: Date;
   messageText: string;
-  images: string[];
+  images?: MessageImage | null;
   printed: boolean;
 
 };
@@ -58,7 +65,7 @@ type SendMessageRequest = {
     authorName: string;
     sentTimestamp: Date;
     messageText: string;
-    images: string[];
+  images?: MessageImage | null;
 }
 
 app.post("/send", (req, res) => {
@@ -80,7 +87,7 @@ app.post("/send", (req, res) => {
     authorName: body.authorName,
     sentTimestamp: new Date(),
     messageText: body.messageText,
-    images: body.images ?? [],
+    images: body.images ?? null,
     printed: false,
   };
 
@@ -110,17 +117,9 @@ app.get("/messages", async (req, res) => {
       .collection(Collections.messages)
       .get();
 
-    if (querySnapshot.docs.length === 0) {
-      res.status(200).send("Message not found");
-      return;
-    }
-
-    const unprintedDocs = querySnapshot.docs.filter(
-      (doc) => !(doc.data() as MessageDocument).printed
-    );
-
-    const outputMessages: Message[] = unprintedDocs.map((doc) => {
+    const messages: Message[] = querySnapshot.docs.map((doc: any) => {
       const data = doc.data() as MessageDocument;
+
       return {
         authorUid: data.authorUid,
         destinationPid: data.destinationPid,
@@ -130,21 +129,28 @@ app.get("/messages", async (req, res) => {
             ? data.sentTimestamp
             : data.sentTimestamp.toDate(),
         messageText: data.messageText,
-        images: data.images ?? [],
+        images: data.images ?? null,
         printed: data.printed,
       };
     });
 
-    // Mark returned messages as printed in Firestore so they aren't re-sent.
-    if (unprintedDocs.length > 0) {
-      const batch = db.batch();
-      for (const doc of unprintedDocs) {
-        batch.update(doc.ref, { printed: true });
-      }
-      await batch.commit();
+    //If no messages are found then we want to return a 404 error.
+    if (messages.length === 0) {
+      res.status(200).send("Message not found");
+      return;
     }
 
-    res.json(outputMessages);
+    //We have all the messages this printer has recieved, we want to filter out the messages that have already been printed and return the rest.
+    var outputMessage : Message[] = [];
+    for (const message of messages) {
+        if(message.printed) {
+            continue;
+        }
+      
+        outputMessage.push(message);
+    }
+
+    res.json(outputMessage);
   } catch (error) {
     console.error("Failed to fetch messages", error);
     res.status(500).send("Failed to fetch messages");
