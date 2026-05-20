@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,7 +11,6 @@ import 'package:http/http.dart' as http;
 
 
 import '../../app/theme.dart';
-import '../auth/user_profile_repository.dart';
 import '../onboarding/onboarding_state.dart';
 import 'drawing_canvas.dart';
 
@@ -20,6 +18,17 @@ const int _printerWidthPx = 384;
 const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
 
 enum _Source { text, photo, draw }
+
+enum _TextSize {
+  small(label: 'S', px: 18),
+  medium(label: 'M', px: 26),
+  large(label: 'L', px: 36),
+  xlarge(label: 'XL', px: 52);
+
+  const _TextSize({required this.label, required this.px});
+  final String label;
+  final double px;
+}
 
 class SendScreen extends ConsumerStatefulWidget {
   const SendScreen({super.key});
@@ -44,6 +53,10 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   String? _error;
   String? _info;
   String _serverUrl = _defaultServerUrl;
+
+  _TextSize _textSize = _TextSize.medium;
+  bool _textBold = false;
+  bool _textItalic = false;
 
   @override
   void initState() {
@@ -172,7 +185,12 @@ class _SendScreenState extends ConsumerState<SendScreen> {
             return;
           }
           setState(() => _sendStatus = 'RENDERING TEXT...');
-          rawForPipeline = await _renderTextToPng(text);
+          rawForPipeline = await _renderTextToPng(
+            text,
+            fontSize: _textSize.px,
+            bold: _textBold,
+            italic: _textItalic,
+          );
           break;
         case _Source.photo:
           if (_selectedRawBytes == null) {
@@ -206,44 +224,25 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         return;
       }
 
-      setState(() => _sendStatus = 'UPLOADING...');
-      final user = FirebaseAuth.instance.currentUser!;
-      final imageBase64 = base64Encode(processed.pngBytes);
-      final messageText = _source == _Source.text ? _messageCtl.text.trim() : '';
-
-      final docRef = await ref
-          .read(firestoreProvider)
-          .collection('printers')
-          .doc(destinationPid)
-          .collection('messages')
-          .add({
-            'authorUid': user.uid,
-            'authorName': user.displayName ?? '',
-            'destinationPid': destinationPid,
-            'sentTimestamp': FieldValue.serverTimestamp(),
-            'messageText': messageText,
-            'images': [imageBase64],
-            'printed': false,
-          });
-
       setState(() => _sendStatus = 'SENDING TO SERVER...');
-      final printerId = _printerIdCtl.text.trim();
-      if (printerId.isEmpty) {
-        setState(() => _error = 'Enter a printer ID first.');
-        return;
-      }
-
-      final currentUser = FirebaseAuth.instance.currentUser!;
+      final user = FirebaseAuth.instance.currentUser!;
+      final messageText = _source == _Source.text ? _messageCtl.text.trim() : '';
 
       try {
         final response = await http.post(
-          Uri.parse('$_serverUrl/send?pid=$printerId'),
+          Uri.parse('$_serverUrl/send?pid=$destinationPid'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
-            'authorUid': currentUser.uid,
-            'authorName': currentUser.displayName ?? 'Unknown',
+            'authorUid': user.uid,
+            'authorName': user.displayName ?? 'Unknown',
             'messageText': messageText,
-            'images': [],
+            'images': [
+              {
+                'width': processed.width,
+                'height': processed.height,
+                'bitmap': processed.bitmapBase64,
+              },
+            ],
           }),
         );
 
@@ -261,7 +260,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       _drawingController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Sent → printers/$destinationPid/messages/${docRef.id}'),
+          content: Text('Sent → $destinationPid'),
         ),
       );
     } catch (e) {
@@ -353,9 +352,25 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           controller: _messageCtl,
           maxLines: 6,
           minLines: 4,
+          style: TextStyle(
+            fontFamily: 'Courier',
+            fontFamilyFallback: const ['Menlo', 'monospace'],
+            fontSize: 16,
+            fontWeight: _textBold ? FontWeight.w700 : FontWeight.w400,
+            fontStyle: _textItalic ? FontStyle.italic : FontStyle.normal,
+          ),
           decoration: const InputDecoration(
             hintText: 'Type something to print...',
           ),
+        ),
+        const SizedBox(height: 12),
+        _TextStyleToolbar(
+          size: _textSize,
+          bold: _textBold,
+          italic: _textItalic,
+          onSizeChanged: (s) => setState(() => _textSize = s),
+          onBoldToggled: () => setState(() => _textBold = !_textBold),
+          onItalicToggled: () => setState(() => _textItalic = !_textItalic),
         ),
       ],
     );
@@ -545,15 +560,23 @@ class _ImagePreview extends StatelessWidget {
   }
 }
 
+// Hard cap on print height (px). 1024 px ≈ 12 cm of paper at the printer's
+// vertical density. Prevents a misclicked panorama from chewing through the
+// roll for 30 seconds.
+const int _maxPrintHeightPx = 1024;
+
 class _ProcessedImage {
   const _ProcessedImage({
-    required this.pngBytes,
-    required this.base64,
+    required this.bitmap,
+    required this.bitmapBase64,
     required this.width,
     required this.height,
   });
-  final Uint8List pngBytes;
-  final String base64;
+  // Packed 1-bit-per-pixel bitmap, MSB-first within each byte, 1 = black.
+  // Bytes per row = width / 8. Ready to hand to Adafruit_Thermal::printBitmap
+  // on the ESP32 with no further processing.
+  final Uint8List bitmap;
+  final String bitmapBase64;
   final int width;
   final int height;
 }
@@ -567,21 +590,45 @@ _ProcessedImage _resizeGrayscaleDither(Uint8List raw) {
   if (decoded == null) {
     throw Exception('Unsupported image format.');
   }
-  final resized = decoded.width == _printerWidthPx
+  var resized = decoded.width == _printerWidthPx
       ? decoded
       : img.copyResize(decoded, width: _printerWidthPx);
+  if (resized.height > _maxPrintHeightPx) {
+    final cropY = (resized.height - _maxPrintHeightPx) ~/ 2;
+    resized = img.copyCrop(
+      resized,
+      x: 0,
+      y: cropY,
+      width: resized.width,
+      height: _maxPrintHeightPx,
+    );
+  }
   final gray = img.grayscale(resized);
   final dithered = img.ditherImage(
     gray,
     kernel: img.DitherKernel.floydSteinberg,
     serpentine: true,
   );
-  final pngBytes = Uint8List.fromList(img.encodePng(dithered));
+
+  final w = dithered.width;
+  final h = dithered.height;
+  final bytesPerRow = (w + 7) ~/ 8;
+  final out = Uint8List(bytesPerRow * h);
+  for (var y = 0; y < h; y++) {
+    final rowOffset = y * bytesPerRow;
+    for (var x = 0; x < w; x++) {
+      // After Floyd-Steinberg with the default 2-color palette, pixels are
+      // effectively 0 (black) or 255 (white). Threshold at 128 to be safe.
+      if (dithered.getPixel(x, y).r < 128) {
+        out[rowOffset + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+    }
+  }
   return _ProcessedImage(
-    pngBytes: pngBytes,
-    base64: base64Encode(pngBytes),
-    width: dithered.width,
-    height: dithered.height,
+    bitmap: out,
+    bitmapBase64: base64Encode(out),
+    width: w,
+    height: h,
   );
 }
 
@@ -594,21 +641,27 @@ Uint8List _grayscaleOnly(Uint8List raw) {
   return Uint8List.fromList(img.encodePng(gray));
 }
 
-Future<Uint8List> _renderTextToPng(String text) async {
+Future<Uint8List> _renderTextToPng(
+  String text, {
+  required double fontSize,
+  required bool bold,
+  required bool italic,
+}) async {
   const padding = 16.0;
-  const fontSize = 22.0;
   const lineHeight = 1.3;
   final maxWidth = _printerWidthPx - padding * 2;
 
   final painter = TextPainter(
     text: TextSpan(
       text: text,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Courier',
-        fontFamilyFallback: ['Menlo', 'monospace'],
-        color: Color(0xFF000000),
+        fontFamilyFallback: const ['Menlo', 'monospace'],
+        color: const Color(0xFF000000),
         fontSize: fontSize,
         height: lineHeight,
+        fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+        fontStyle: italic ? FontStyle.italic : FontStyle.normal,
       ),
     ),
     textDirection: TextDirection.ltr,
@@ -629,4 +682,104 @@ Future<Uint8List> _renderTextToPng(String text) async {
   final image = await picture.toImage(width, height);
   final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
   return byteData!.buffer.asUint8List();
+}
+
+class _TextStyleToolbar extends StatelessWidget {
+  const _TextStyleToolbar({
+    required this.size,
+    required this.bold,
+    required this.italic,
+    required this.onSizeChanged,
+    required this.onBoldToggled,
+    required this.onItalicToggled,
+  });
+
+  final _TextSize size;
+  final bool bold;
+  final bool italic;
+  final ValueChanged<_TextSize> onSizeChanged;
+  final VoidCallback onBoldToggled;
+  final VoidCallback onItalicToggled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: SegmentedButton<_TextSize>(
+            showSelectedIcon: false,
+            segments: _TextSize.values
+                .map((s) => ButtonSegment<_TextSize>(
+                      value: s,
+                      label: Text(s.label),
+                    ))
+                .toList(),
+            selected: {size},
+            onSelectionChanged: (set) => onSizeChanged(set.first),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _ToggleChip(
+          label: 'B',
+          bold: true,
+          active: bold,
+          onTap: onBoldToggled,
+        ),
+        const SizedBox(width: 8),
+        _ToggleChip(
+          label: 'I',
+          italic: true,
+          active: italic,
+          onTap: onItalicToggled,
+        ),
+      ],
+    );
+  }
+}
+
+class _ToggleChip extends StatelessWidget {
+  const _ToggleChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.bold = false,
+    this.italic = false,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final bool bold;
+  final bool italic;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Material(
+        color: active ? PrintimateColors.text : PrintimateColors.surface,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: PrintimateColors.border),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: active
+                    ? PrintimateColors.background
+                    : PrintimateColors.text,
+                fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+                fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
