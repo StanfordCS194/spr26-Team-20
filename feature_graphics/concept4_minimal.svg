@@ -1,0 +1,10 @@
+<svg width="1024" height="500" viewBox="0 0 1024 500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="500" fill="#0a0a0a"/>
+  <!-- Just a smiley as the dot of the i, plus large wordmark -->
+  <g transform="translate(220, 295)">
+    <text x="0" y="0" fill="#ffffff" font-family="-apple-system, system-ui, 'Segoe UI', Helvetica, sans-serif" font-size="150" font-weight="500" letter-spacing="-3">printimate</text>
+  </g>
+  <!-- Faint dashed line above and below for receipt feel -->
+  <line x1="160" y1="200" x2="864" y2="200" stroke="#ffffff" stroke-width="1" stroke-dasharray="6 6" opacity="0.25"/>
+  <line x1="160" y1="335" x2="864" y2="335" stroke="#ffffff" stroke-width="1" stroke-dasharray="6 6" opacity="0.25"/>
+</svg>

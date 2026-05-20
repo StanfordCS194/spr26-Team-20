@@ -16,6 +16,7 @@
 
 // ---- Thermal printer UART (Niklas's domain) --------------------------------
 // We use UART2 so UART0 stays free for the serial console.
+#define PRINTER_UART_NUM    2
 #define PIN_PRINTER_TX      17   // ESP32 TX -> Printer RX
 #define PIN_PRINTER_RX      16   // ESP32 RX -> Printer TX
 #define PIN_PRINTER_POWER   -1   // -1 = unused; set to a GPIO if we add a power
