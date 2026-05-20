@@ -34,7 +34,7 @@ const adminApp = initializeApp({
 const db = getFirestore(adminApp);
 
 const app = express();
-const port = 3000;
+const port = Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -49,6 +49,12 @@ app.use((req, res, next) => {
     }
 
     next();
+});
+
+app.get("/server-info", (req, res) => {
+  res.json({
+    primaryUrl: process.env.PRIMARY_URL ?? `https://${req.get("host")}`,
+  });
 });
 
 type Message = {
@@ -447,7 +453,7 @@ app.get("/server-info", (req, res) => {
   });
 });
 
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${port}`);
 
   const localIPs = getLocalIPv4Addresses();
@@ -476,3 +482,31 @@ function getLocalIPv4Addresses(): string[] {
 
   return [...addresses];
 }
+
+app.post("/printers-list", async (req, res) => {
+  const uid = req.body.uid as string;
+
+  if (!uid) {
+    res.status(400).send("Missing required field: uid");
+    return;
+  }
+
+  try {
+    const doc = await db.collection(Collections.users).doc(uid).get();
+
+    if (!doc.exists) {
+      res.status(404).send("User not found");
+      return;
+    }
+
+    const data = doc.data();
+    const ownedPids = (data?.ownedPids as string[] | undefined) ?? [];
+    const friendedPids = (data?.friendedPids as string[] | undefined) ?? [];
+    const printerIds = [...new Set([...ownedPids, ...friendedPids])];
+
+    res.status(200).json({ printers: printerIds });
+  } catch (error) {
+    console.error("Error fetching printer list", error);
+    res.status(500).send("Failed to fetch printer list");
+  }
+});
