@@ -35,19 +35,13 @@ export interface PrinterDocument {
 	ownerUid: string | null;
 }
 
-export interface MessageImage {
-	width: number;
-	height: number;
-	bitmap: string;
-}
-
 export interface MessageDocument {
 	authorUid: string;
 	destinationPid: string;
 	authorName: string;
 	sentTimestamp: FirestoreTimestampLike;
 	messageText: string;
-	images?: MessageImage | null;
+	images?: string[] | null;
 	printed: boolean;
 }
 
