@@ -56,7 +56,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   String _sendStatus = '';
   String? _error;
   String? _info;
-  String _serverUrl = _defaultServerUrl;
 
   _TextSize _textSize = _TextSize.medium;
   bool _textBold = false;
@@ -66,25 +65,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   void initState() {
     super.initState();
     _printerIdCtl.text = widget.printerName;
-    _fetchServerUrl();
-  }
-
-  Future<void> _fetchServerUrl() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_defaultServerUrl/server-info'),
-      ).timeout(const Duration(seconds: 2));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          _serverUrl = data['primaryUrl'] ?? _defaultServerUrl;
-        });
-      }
-    } catch (e) {
-      // Fall back to default if fetch fails
-      debugPrint('Failed to fetch server URL: $e');
-    }
   }
 
   @override
@@ -235,7 +215,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
       try {
         final response = await http.post(
-          Uri.parse('$_serverUrl/send?pid=$destinationPid'),
+          Uri.parse('$_defaultServerUrl/send?pid=$destinationPid'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'authorUid': user.uid,

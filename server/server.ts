@@ -37,26 +37,12 @@ const db = getFirestore(adminApp);
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+}));
 app.use(express.json());
-app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        res.sendStatus(204);
-        return;
-    }
-
-    next();
-});
-
-app.get("/server-info", (req, res) => {
-  res.json({
-    primaryUrl: process.env.PRIMARY_URL ?? `https://${req.get("host")}`,
-  });
-});
 
 type Message = {
   authorUid: string;
@@ -91,7 +77,7 @@ app.post("/send", (req, res) => {
 
   console.log(`Received request to send message to pid ${pid} with body:`, body);
 
-  if (!pid || !body.messageText || !body.authorUid) {
+  if (!pid || !body.authorUid) {
     res
       .status(400)
       .send("Missing required fields: pid, authorUid, messageText");
@@ -442,16 +428,8 @@ app.post("/reject-permission-request", async (req, res) => {
  */
 
 app.get("/server-info", (req, res) => {
-  const localIPs = getLocalIPv4Addresses();
-  const urls = [
-    `http://localhost:${port}`,
-    ...localIPs.map(ip => `http://${ip}:${port}`)
-  ];
-  
   res.status(200).json({ 
-    port,
-    urls,
-    primaryUrl: localIPs.length > 0 ? `http://${localIPs[0]}:${port}` : `http://localhost:${port}`
+    primaryUrl: process.env.PRIMARY_URL ?? `https://${req.get("host")}`,
   });
 });
 
