@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../history/history_screen.dart';
 import '../profile/profile_screen.dart';
-import '../send/send_screen.dart';
+import '../send/printers_list_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, this.initialIndex = 1});
@@ -47,7 +47,7 @@ class _HomeShellState extends State<HomeShell> {
           onPageChanged: (i) => setState(() => _index = i),
           children: const [
             HistoryScreen(),
-            SendScreen(),
+            PrintersListScreen(),
             ProfileScreen(),
           ],
         ),

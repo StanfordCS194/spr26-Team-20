@@ -15,7 +15,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final loggedIn = auth.value != null;
       final loc = state.matchedLocation;
-      const legacy = {'/profile', '/send', '/history'};
+      const legacy = {'/profile', '/history'};
       if (legacy.contains(loc)) return loggedIn ? '/home' : '/intro';
       
       // Allow onboarding routes for logged-in users
@@ -33,6 +33,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/onboarding/profile', builder: (ctx, st) => const ProfileScreen()),
       GoRoute(path: '/onboarding/printer', builder: (ctx, st) => const PrinterSetupScreen()),
       GoRoute(path: '/home', builder: (ctx, st) => const HomeShell()),
+      GoRoute(path: '/send', builder: (ctx, st) => const SendScreen()), 
     ],
   );
 });

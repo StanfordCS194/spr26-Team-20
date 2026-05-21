@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
+import '../send/send_screen.dart';
 
 const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
 
@@ -16,9 +17,6 @@ class _Printer {
   final String pid;
   const _Printer({required this.pid});
 }
-
-const List<_Printer> _fallbackPrinters = [_Printer(pid: 'printer1')];
-
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
@@ -71,7 +69,6 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
         setState(() {
           _printers
             ..clear()
-            ..addAll(_fallbackPrinters);
           _error = 'Sign in to view your printers.';
           _loading = false;
         });
@@ -106,11 +103,10 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
       setState(() {
         _printers
           ..clear()
-          ..addAll(_fallbackPrinters);
         _error = 'Could not load printers (offline or server error).';
         _loading = false;
       });
-      debugPrint('Failed to load printers, using fallback list: $e');
+      debugPrint('Failed to load printers: $e');
     }
   }
 
@@ -215,10 +211,14 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
                                 itemBuilder: (context, index) => _PrinterTile(
                                   printer: _printers[index],
                                   onTap: () {
-                                    ref
-                                        .read(onboardingProvider.notifier)
-                                        .setPrinterId(_printers[index].pid);
-                                    context.go('/send');
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => SendScreen(
+                                          printerId: _printers[index].pid,
+                                        ),
+                                      ),
+                                    )
                                   },
                                 ),
                               ),

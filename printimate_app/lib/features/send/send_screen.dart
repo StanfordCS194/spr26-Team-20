@@ -24,7 +24,8 @@ const String _defaultServerUrl = 'http://localhost:3000';
 enum _Source { text, photo, draw }
 
 class SendScreen extends ConsumerStatefulWidget {
-  const SendScreen({super.key});
+  final String printerName;
+  const SendScreen({super.key, required this.printerName});
 
   @override
   ConsumerState<SendScreen> createState() => _SendScreenState();

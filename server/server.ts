@@ -502,7 +502,12 @@ app.post("/printers-list", async (req, res) => {
     const data = doc.data();
     const ownedPids = (data?.ownedPids as string[] | undefined) ?? [];
     const friendedPids = (data?.friendedPids as string[] | undefined) ?? [];
-    const printerIds = [...new Set([...ownedPids, ...friendedPids])];
+    let printerIds = [...new Set([...ownedPids, ...friendedPids])];
+
+    if (printerIds.length === 0) {
+      printerIds = ['printer1'];
+      console.log(`User ${uid} has no printers; returning fallback 'printer1'`);
+    }
 
     res.status(200).json({ printers: printerIds });
   } catch (error) {
