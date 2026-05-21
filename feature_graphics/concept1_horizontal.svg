@@ -1,0 +1,20 @@
+<svg width="1024" height="500" viewBox="0 0 1024 500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="500" fill="#0a0a0a"/>
+  <!-- Mark on left, centered around (256, 250) -->
+  <g transform="translate(146, 130)">
+    <line x1="0" y1="0" x2="0" y2="238" stroke="#ffffff" stroke-width="1.5"/>
+    <line x1="220" y1="0" x2="220" y2="238" stroke="#ffffff" stroke-width="1.5"/>
+    <polyline points="0,0 14,-16 28,0 42,-16 56,0 70,-16 84,0 98,-16 112,0 126,-16 140,0 154,-16 168,0 182,-16 196,0 210,-16 220,-4" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+    <polyline points="0,238 14,254 28,238 42,254 56,238 70,254 84,238 98,254 112,238 126,254 140,238 154,254 168,238 182,254 196,238 210,254 220,242" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+    <line x1="0" y1="30" x2="220" y2="30" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <line x1="0" y1="44" x2="220" y2="44" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <circle cx="110" cy="137" r="68" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+    <circle cx="85" cy="120" r="7" fill="#ffffff"/>
+    <circle cx="135" cy="120" r="7" fill="#ffffff"/>
+    <path d="M80 150 Q110 180 140 150" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="0" y1="220" x2="220" y2="220" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+    <line x1="0" y1="234" x2="220" y2="234" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.5"/>
+  </g>
+  <!-- Wordmark right -->
+  <text x="450" y="275" fill="#ffffff" font-family="-apple-system, system-ui, 'Segoe UI', Helvetica, sans-serif" font-size="120" font-weight="500" letter-spacing="-2">printimate</text>
+</svg>

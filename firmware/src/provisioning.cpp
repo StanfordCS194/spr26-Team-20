@@ -108,10 +108,13 @@ void provisioning_loop() {
 void provisioning_end() {
     PRINTIMATE_LOG_I("Provisioning: tearing down (BLE memory will be freed)");
     // The NETWORK_PROV_SCHEME_HANDLER_FREE_BLE handler we passed to
-    // beginProvision() arranges for the BLE stack memory to be released
-    // on PROV_END. We just need to make sure the manager itself is
-    // de-initialized so we don't leak its task.
-    network_prov_mgr_deinit();
+    // beginProvision() arranges for the manager to be deinitialized AND
+    // the BLE stack memory to be released on PROV_END. Calling
+    // network_prov_mgr_deinit() ourselves here would be a double-free of
+    // the manager's internal FreeRTOS queues — the framework already did
+    // it. Leaving this function as effectively a no-op (just logging) is
+    // intentional. If we ever stop using the FREE_BLE handler, this is
+    // where the explicit deinit would belong.
 }
 
 bool provisioning_isComplete() {
@@ -137,8 +140,18 @@ void provisioning_factoryReset() {
     prefs.clear();
     prefs.end();
 
-    // Wipe Wi-Fi creds stored by WiFiProv. Safe to call even if the prov
-    // manager is not currently initialized — it'll do a one-shot init.
+    // Wipe Wi-Fi creds stored by the provisioning manager. Safe to call even
+    // if the manager is not currently initialized — it'll do a one-shot init.
+    //
+    // IMPORTANT: in the network_prov API, two similarly-named functions
+    // exist with different semantics:
+    //   - network_prov_mgr_reset_provisioning():
+    //       resets the manager's internal state machine. Does NOT wipe creds.
+    //   - network_prov_mgr_reset_wifi_provisioning():
+    //       wipes the stored Wi-Fi credentials.
+    // We want the second one for a factory reset. (In the older wifi_prov API,
+    // the first name had the credential-wiping semantics — beware when
+    // copy-pasting from older examples or rolling back the platform pin.)
     network_prov_mgr_config_t cfg = {};
     cfg.scheme = network_prov_scheme_ble;
     cfg.scheme_event_handler = NETWORK_PROV_EVENT_HANDLER_NONE;
@@ -153,9 +166,9 @@ void provisioning_logQR() {
     // and the `esp_provisioning_ble` Flutter package.
     PRINTIMATE_LOG_I(
         "Provisioning QR payload: "
-        "{\"ver\":\"v1\",\"name\":\"%s\",\"pop\":\"%s\","
+        "{\"ver\":\"v1\",\"name\":\"%s\",\"pid\":\"%s\",\"pop\":\"%s\","
         "\"transport\":\"ble\",\"security\":2}",
-        g_serviceName, g_pop
+        g_serviceName, PRINTIMATE_PID, g_pop
     );
     // Convenience: the same payload as a hosted QR URL Niklas can scan
     // during bring-up before the on-device QR printing is wired up.
@@ -176,34 +189,40 @@ void provisioning_logQR() {
 // by Espressif's reference apps and keeps the name short enough to fit in
 // the 31-byte BLE advertising packet.
 static void buildServiceName() {
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    snprintf(g_serviceName, sizeof(g_serviceName),
-             "PROV_%02X%02X", mac[4], mac[5]);
+    snprintf(g_serviceName, sizeof(g_serviceName), "PROV_%s", PRINTIMATE_PID);
 }
 
+// will do later if have time
+//
 // Per-device PoP. Generated once at first boot and persisted in NVS so it
 // survives reboots and matches the QR code we print for the recipient.
-static void loadOrGeneratePoP() {
-    Preferences prefs;
-    prefs.begin(PRINTIMATE_NVS_NAMESPACE, /*readOnly=*/false);
+//static void loadOrGeneratePoP() {
+//    Preferences prefs;
+//    prefs.begin(PRINTIMATE_NVS_NAMESPACE, /*readOnly=*/false);
+//
+//    String stored = prefs.getString(PRINTIMATE_NVS_KEY_POP, "");
+//    if (stored.length() == PRINTIMATE_POP_LEN) {
+//        strncpy(g_pop, stored.c_str(), sizeof(g_pop) - 1);
+//    } else {
+//        // Generate a fresh PoP. esp_random() is hardware-RNG backed.
+//        static const char alphabet[] =
+//            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // ambiguous chars removed
+//        const size_t alphabetLen = sizeof(alphabet) - 1;
+//        for (size_t i = 0; i < PRINTIMATE_POP_LEN; ++i) {
+//            g_pop[i] = alphabet[esp_random() % alphabetLen];
+//        }
+//        g_pop[PRINTIMATE_POP_LEN] = '\0';
+//        prefs.putString(PRINTIMATE_NVS_KEY_POP, g_pop);
+//        PRINTIMATE_LOG_I("Generated new PoP and stored in NVS");
+//    }
+//    prefs.end();
+//}
 
-    String stored = prefs.getString(PRINTIMATE_NVS_KEY_POP, "");
-    if (stored.length() == PRINTIMATE_POP_LEN) {
-        strncpy(g_pop, stored.c_str(), sizeof(g_pop) - 1);
-    } else {
-        // Generate a fresh PoP. esp_random() is hardware-RNG backed.
-        static const char alphabet[] =
-            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // ambiguous chars removed
-        const size_t alphabetLen = sizeof(alphabet) - 1;
-        for (size_t i = 0; i < PRINTIMATE_POP_LEN; ++i) {
-            g_pop[i] = alphabet[esp_random() % alphabetLen];
-        }
-        g_pop[PRINTIMATE_POP_LEN] = '\0';
-        prefs.putString(PRINTIMATE_NVS_KEY_POP, g_pop);
-        PRINTIMATE_LOG_I("Generated new PoP and stored in NVS");
-    }
-    prefs.end();
+static void loadOrGeneratePoP() {
+    // DEMO SHORTCUT: fixed PoP shared with the Flutter app. See config.h for
+    // the production plan that replaces this with per-device random PoPs.
+    strncpy(g_pop, PRINTIMATE_DEMO_FIXED_POP, sizeof(g_pop) - 1);
+    g_pop[sizeof(g_pop) - 1] = '\0';
 }
 
 // Single event sink for both Wi-Fi and provisioning events emitted by the

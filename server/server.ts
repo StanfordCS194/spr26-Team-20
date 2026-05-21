@@ -19,11 +19,12 @@ const __dirname = dirname(__filename);
 const envDir = join(__dirname, "env");
 const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
 
-if (envFiles.length === 0) {
+const envFile = envFiles[0];
+if (!envFile) {
   throw new Error("No JSON files found in env directory");
 }
 
-const serviceAccountPath = join(envDir, envFiles[0]!);
+const serviceAccountPath = join(envDir, envFile);
 
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
 
@@ -133,9 +134,17 @@ app.get("/messages", async (req, res) => {
       .collection(Collections.messages)
       .get();
 
-    const messages: Message[] = querySnapshot.docs.map((doc: any) => {
-      const data = doc.data() as MessageDocument;
+    if (querySnapshot.docs.length === 0) {
+      res.status(200).send("Message not found");
+      return;
+    }
 
+    const unprintedDocs = querySnapshot.docs.filter(
+      (doc) => !(doc.data() as MessageDocument).printed
+    );
+
+    const outputMessages: Message[] = unprintedDocs.map((doc) => {
+      const data = doc.data() as MessageDocument;
       return {
         authorUid: data.authorUid,
         destinationPid: data.destinationPid,
@@ -150,23 +159,16 @@ app.get("/messages", async (req, res) => {
       };
     });
 
-    //If no messages are found then we want to return a 404 error.
-    if (messages.length === 0) {
-      res.status(404).send("Message not found");
-      return;
+    // Mark returned messages as printed in Firestore so they aren't re-sent.
+    if (unprintedDocs.length > 0) {
+      const batch = db.batch();
+      for (const doc of unprintedDocs) {
+        batch.update(doc.ref, { printed: true });
+      }
+      await batch.commit();
     }
 
-    //We have all the messages this printer has recieved, we want to filter out the messages that have already been printed and return the rest.
-    var outputMessage : Message[] = [];
-    for (const message of messages) {
-        if(message.printed) {
-            continue;
-        }
-      
-        outputMessage.push(message);
-    }
-
-    res.json(outputMessage);
+    res.json(outputMessages);
   } catch (error) {
     console.error("Failed to fetch messages", error);
     res.status(500).send("Failed to fetch messages");
