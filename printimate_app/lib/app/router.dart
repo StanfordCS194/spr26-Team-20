@@ -28,6 +28,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   final hasPrinter = ref.watch(
     onboardingProvider.select((s) => s.printerId.trim().isNotEmpty),
   );
+  final selectedPrinterName = ref.watch(
+    onboardingProvider.select((s) => s.printerId.trim()),
+  );
 
   return GoRouter(
     initialLocation: '/splash',
@@ -41,7 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final seenTour = prefs.hasSeenIntroTour;
 
       // Legacy redirects.
-      const legacy = {'/profile', '/send', '/history'};
+      const legacy = {'/profile', '/history'};
       if (legacy.contains(loc)) return loggedIn ? '/home' : '/auth';
 
       // Splash is only valid while auth is loading.
@@ -82,7 +85,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/onboarding/printer', builder: (_, __) => const PrinterSetupScreen()),
       GoRoute(path: '/provisioning', builder: (_, __) => const ProvisioningScreen()),
       GoRoute(path: '/home', builder: (_, __) => const HomeShell()),
-      GoRoute(path: '/send', builder: (_, __) => const SendScreen()),
+      GoRoute(
+        path: '/send',
+        builder: (_, __) => SendScreen(
+          printerName: selectedPrinterName.isEmpty ? 'printer1' : selectedPrinterName,
+        ),
+      ),
     ],
   );
 });

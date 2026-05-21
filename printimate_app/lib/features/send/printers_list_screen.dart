@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
@@ -17,12 +16,14 @@ class _Printer {
   final String pid;
   const _Printer({required this.pid});
 }
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
 class PrintersListScreen extends ConsumerStatefulWidget {
-  const PrintersListScreen({super.key});
+  final ValueChanged<String> onPrinterSelected;
+  const PrintersListScreen({super.key, required this.onPrinterSelected});
 
   @override
   ConsumerState<PrintersListScreen> createState() => _PrintersListScreenState();
@@ -30,7 +31,6 @@ class PrintersListScreen extends ConsumerStatefulWidget {
 
 class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
   final List<_Printer> _printers = [];
-  String _serverUrl = _defaultServerUrl;
   bool _loading = true;
   String? _error;
 
@@ -40,21 +40,6 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
     _loadPrinters();
   }
 
-  Future<void> _fetchServerUrl() async {
-    try {
-      final response = await http
-          .get(Uri.parse('$_defaultServerUrl/server-info'))
-          .timeout(const Duration(seconds: 2));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        _serverUrl = data['primaryUrl'] as String? ?? _defaultServerUrl;
-      }
-    } catch (e) {
-      debugPrint('Failed to fetch server URL: $e');
-    }
-  }
-
   Future<void> _loadPrinters() async {
     setState(() {
       _loading = true;
@@ -62,13 +47,12 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
     });
 
     try {
-      await _fetchServerUrl();
-
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         setState(() {
           _printers
             ..clear()
+            ..addAll(const [_Printer(pid: 'printer1')]);
           _error = 'Sign in to view your printers.';
           _loading = false;
         });
@@ -77,7 +61,7 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
 
       final response = await http
           .post(
-            Uri.parse('$_serverUrl/printers-list'),
+            Uri.parse('$_defaultServerUrl/printers-list'),
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode({'uid': user.uid}),
           )
@@ -103,6 +87,7 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
       setState(() {
         _printers
           ..clear()
+          ..addAll(const [_Printer(pid: 'printer1')]);
         _error = 'Could not load printers (offline or server error).';
         _loading = false;
       });
@@ -112,122 +97,116 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── Header ────────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Row(
-              children: [
-                const Icon(Icons.print_outlined, color: PrintimateColors.text),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'PRINTERS LIST',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(color: PrintimateColors.border, height: 1),
-
-          // ── Sub-header ───────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.chat_bubble_outline,
-                    size: 14, color: PrintimateColors.textDim),
-                const SizedBox(width: 8),
-                Text(
-                  'Select a printer to message',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: PrintimateColors.textDim,
-                      ),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(color: PrintimateColors.border, height: 1),
-
-          // ── Printer's list ───────────────────────────────────────────────────
-          Expanded(
-            child: _loading
-                ? const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: PrintimateColors.text,
-                      ),
+    return Material(
+      color: Colors.transparent,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header ──────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Row(
+                children: [
+                  const Icon(Icons.print_outlined, color: PrintimateColors.text),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'PRINTERS LIST',
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
-                  )
-                : _printers.isEmpty
-                    ? const _EmptyState()
-                    : Column(
-                        children: [
-                          if (_error != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.info_outline,
-                                      size: 14, color: PrintimateColors.textDim),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _error!,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(
-                                            color: PrintimateColors.textDim,
-                                          ),
-                                    ),
-                                  ),
-                                  OutlinedButton(
-                                    onPressed: _loadPrinters,
-                                    child: const Text('RETRY'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          Expanded(
-                            child: RefreshIndicator(
-                              onRefresh: _loadPrinters,
-                              child: ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                itemCount: _printers.length,
-                                separatorBuilder: (_, __) => const Divider(
-                                  color: PrintimateColors.border,
-                                  height: 1,
-                                ),
-                                itemBuilder: (context, index) => _PrinterTile(
-                                  printer: _printers[index],
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => SendScreen(
-                                          printerId: _printers[index].pid,
-                                        ),
-                                      ),
-                                    )
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(color: PrintimateColors.border, height: 1),
+
+            // ── Sub-header ───────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.chat_bubble_outline,
+                      size: 14, color: PrintimateColors.textDim),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Select a printer to message',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: PrintimateColors.textDim,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(color: PrintimateColors.border, height: 1),
+
+            // ── Printer's list ───────────────────────────────────────────────
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: PrintimateColors.text,
+                        ),
                       ),
-          ),
-        ],
+                    )
+                  : _printers.isEmpty
+                      ? const _EmptyState()
+                      : Column(
+                          children: [
+                            if (_error != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline,
+                                        size: 14, color: PrintimateColors.textDim),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _error!,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              color: PrintimateColors.textDim,
+                                            ),
+                                      ),
+                                    ),
+                                    OutlinedButton(
+                                      onPressed: _loadPrinters,
+                                      child: const Text('RETRY'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Expanded(
+                              child: RefreshIndicator(
+                                onRefresh: _loadPrinters,
+                                child: ListView.separated(
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  itemCount: _printers.length,
+                                  separatorBuilder: (_, __) => const Divider(
+                                    color: PrintimateColors.border,
+                                    height: 1,
+                                  ),
+                                  itemBuilder: (context, index) => _PrinterTile(
+                                    printer: _printers[index],
+                                    onTap: () => widget.onPrinterSelected(_printers[index].pid),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -245,8 +224,7 @@ class _PrinterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),

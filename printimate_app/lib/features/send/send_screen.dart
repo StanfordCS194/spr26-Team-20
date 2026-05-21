@@ -65,6 +65,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   @override
   void initState() {
     super.initState();
+    _printerIdCtl.text = widget.printerName;
     _fetchServerUrl();
   }
 
@@ -331,20 +332,31 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   }
 
   Widget _buildPrinterSelector(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('PRINTER ID', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _printerIdCtl,
-          decoration: const InputDecoration(
-            hintText: 'Enter printer ID...',
-          ),
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('PRINTER', style: Theme.of(context).textTheme.labelLarge),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: PrintimateColors.border),
         ),
-      ],
-    );
-  }
+        child: Row(
+          children: [
+            const Icon(Icons.print_outlined,
+                size: 16, color: PrintimateColors.textDim),
+            const SizedBox(width: 10),
+            Text(
+              widget.printerName,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
 
   Widget _buildText(BuildContext context) {
     return Column(
