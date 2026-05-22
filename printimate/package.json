@@ -1,4 +1,6 @@
-git commit -m "fix: add @types/cors"{
+{
+  "name": "printimate",
+  "version": "1.0.0",
   "type": "module",
   "dependencies": {
     "cors": "^2.8.6",
