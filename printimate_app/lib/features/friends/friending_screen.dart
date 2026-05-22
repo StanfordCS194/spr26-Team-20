@@ -9,7 +9,6 @@ import 'package:http/http.dart' as http;
 import '../../app/theme.dart';
 import '../auth/user_profile_repository.dart';
 import '../onboarding/onboarding_state.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
 
@@ -104,30 +103,61 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
     });
   }
 
-Future<void> _sendRequest() async {
-  final pid = _pidCtl.text.trim();
-  if (pid.isEmpty) return;
+  Future<void> _sendRequest() async {
+    final pid = _pidCtl.text.trim();
+    if (pid.isEmpty) return;
 
-  final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
-  setState(() {
-    _submitting = true;
-    _error = null;
-    _successPid = null;
-  });
+    setState(() {
+      _submitting = true;
+      _error = null;
+      _successPid = null;
+    });
 
-  try {
-    // Check if printer exists via server
-    final checkResponse = await http.get(
-      Uri.parse('$_defaultServerUrl/printer-exists?pid=$pid'),
-    ).timeout(const Duration(seconds: 5));
+    try {
+      // Check if printer exists via server
+      final checkResponse = await http.get(
+        Uri.parse('$_defaultServerUrl/printer-exists?pid=$pid'),
+      ).timeout(const Duration(seconds: 5));
 
-    if (checkResponse.statusCode != 200) {
-      throw Exception(checkResponse.body);
+      if (checkResponse.statusCode != 200) {
+        throw Exception(checkResponse.body);
+      }
+
+      final checkData = jsonDecode(checkResponse.body) as Map<String, dynamic>;
+      if (checkData['exists'] != true) {
+        setState(() {
+          _error = 'Printer not found. Check the ID and try again.';
+          _submitting = false;
+        });
+        return;
+      }
+
+      // Send permission request
+      final response = await http.post(
+        Uri.parse('$_defaultServerUrl/send-permission-request?pid=$pid'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'fromUid': uid}),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode != 200) {
+        throw Exception(response.body);
+      }
+
+      setState(() {
+        _successPid = pid;
+        _submitting = false;
+        _pidCtl.clear();
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to send request. Check the printer ID and try again.';
+        _submitting = false;
+      });
     }
-
-    final checkData = jsonDecode(checkResponse.body) as Map
+  }
 
   void _finish() {
     ref.read(onboardingProvider.notifier).complete();
@@ -205,7 +235,6 @@ Future<void> _sendRequest() async {
                   ),
                 ],
               ),
-
               if (_successPid != null) ...[
                 const SizedBox(height: 16),
                 Container(
@@ -229,7 +258,6 @@ Future<void> _sendRequest() async {
                   ),
                 ),
               ],
-
               const Spacer(),
               OutlinedButton(
                 onPressed: _submitting ? null : _finish,
