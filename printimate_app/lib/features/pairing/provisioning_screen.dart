@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -6,9 +7,15 @@ import 'package:flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 
 import '../../app/theme.dart';
+import '../../app/config.dart';
+
 import '../onboarding/onboarding_state.dart';
+
 
 // Demo shortcut: matches PRINTIMATE_DEMO_FIXED_POP in firmware/include/config.h.
 // Replace with per-device PoP delivered via QR code before any real release.
@@ -31,6 +38,7 @@ enum _Step {
   pickWifi,
   enterPassword,
   provisioning,
+  manualEntry, // temporary to test friend requests
   success,
   error,
 }
@@ -45,6 +53,7 @@ class ProvisioningScreen extends ConsumerStatefulWidget {
 class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   final _ble = FlutterEspBleProv();
   final _passwordCtl = TextEditingController();
+  final _manualPidCtl = TextEditingController(); // temporary to test friend requests
 
   _Step _step = _Step.scanning;
   List<String> _devices = const [];
@@ -64,6 +73,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   @override
   void dispose() {
     _passwordCtl.dispose();
+    _manualPidCtl.dispose(); // temporary to test friend requests
     super.dispose();
   }
 
@@ -163,11 +173,14 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       );
       if (!mounted) return;
       if (ok == true) {
-        ref.read(onboardingProvider.notifier).setPrinterId(_parsePid(device));
+        final pid = _parsePid(device);
+        final username = await _fetchUsername();
+        final fullPid = username != null ? '$pid-$username' : pid;
+        await _callSetup(fullPid);
+        ref.read(onboardingProvider.notifier).setPrinterId(fullPid);
         setState(() => _step = _Step.success);
         await Future.delayed(const Duration(milliseconds: 1200));
-        if (!mounted) return;
-        context.go('/home');
+        if (mounted) context.go('/home');
       } else {
         setState(() {
           _step = _Step.error;
@@ -183,47 +196,114 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       });
     }
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final canPop = Navigator.of(context).canPop();
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: PrintimateColors.background,
-        elevation: 0,
-        leading: canPop
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: PrintimateColors.text),
-                onPressed: () => context.pop(),
-              )
-            : null,
-        title: Text(
-          'PAIR A PRINTER',
-          style:
-              Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: 2),
-        ),
-      ),
-      body: SafeArea(
-        child: _bleProvisioningSupported
-            ? _SupportedBody(
-                step: _step,
-                devices: _devices,
-                wifiNetworks: _wifiNetworks,
-                selectedDevice: _selectedDevice,
-                selectedSsid: _selectedSsid,
-                passwordCtl: _passwordCtl,
-                errorMessage: _errorMessage,
-                onRescan: _startScan,
-                onPickDevice: _pickDevice,
-                onPickSsid: _pickSsid,
-                onSubmitCreds: _submitCredentials,
-                onRetry: _startScan,
-                parsePid: _parsePid,
-              )
-            : _UnsupportedBody(showCancel: canPop),
-      ),
-    );
+  Future<String?> _fetchUsername() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    return doc.data()?['username'] as String?;
   }
+
+  Future<void> _callSetup(String pid) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final response = await http.post(
+        Uri.parse('${Config.serverBaseUrl}/setup?pid=$pid'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'uid': uid}),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode != 200) {
+        debugPrint('Setup failed: ${response.body}');
+      } else {
+        debugPrint('Printer setup complete for $pid');
+      }
+    } catch (e) {
+      debugPrint('Setup error: $e');
+    }
+  }
+  // temporary manual entry flow to test friend requests without needing a real printer on hand. R
+  // Remove once BLE provisioning is fully implemented and tested.
+  void _goToManualEntry() {
+    setState(() {
+      _step = _Step.manualEntry;
+      _errorMessage = '';
+    });
+  }
+  // temporary manual entry flow to test friend requests without needing a real printer on hand. R
+  // Remove once BLE provisioning is fully implemented and tested.
+  Future<void> _submitManualPid() async {
+    final pid = _manualPidCtl.text.trim();
+    if (pid.isEmpty) return;
+    final username = await _fetchUsername();
+    final fullPid = username != null ? '$pid-$username' : pid;
+    await _callSetup(fullPid);
+    ref.read(onboardingProvider.notifier).setPrinterId(fullPid);
+    setState(() => _step = _Step.success);
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"$fullPid" was added as your printer.'),
+        backgroundColor: PrintimateColors.surface,
+      ),
+      );
+    }
+    setState(() => _step = _Step.success);
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (mounted) context.go('/home');
+  }
+
+@override
+Widget build(BuildContext context) {
+  final canPop = Navigator.of(context).canPop();
+  return Scaffold(
+    appBar: AppBar(
+      backgroundColor: PrintimateColors.background,
+      elevation: 0,
+      leading: canPop
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back, color: PrintimateColors.text),
+              onPressed: () => context.pop(),
+            )
+          : null,
+      title: Text(
+        'PAIR A PRINTER',
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: 2),
+      ),
+    ),
+    body: SafeArea(
+      child: _bleProvisioningSupported
+          ? _SupportedBody(
+              step: _step,
+              devices: _devices,
+              wifiNetworks: _wifiNetworks,
+              selectedDevice: _selectedDevice,
+              selectedSsid: _selectedSsid,
+              passwordCtl: _passwordCtl,
+              errorMessage: _errorMessage,
+              onRescan: _startScan,
+              onPickDevice: _pickDevice,
+              onPickSsid: _pickSsid,
+              onSubmitCreds: _submitCredentials,
+              onRetry: _startScan,
+              parsePid: _parsePid,
+              manualPidCtl: _manualPidCtl,
+              onGoManual: _goToManualEntry,
+              onSubmitManualPid: _submitManualPid,
+            )
+          : _UnsupportedBody(
+              showCancel: canPop,
+              manualPidCtl: _manualPidCtl,
+              onSubmitManualPid: _submitManualPid,
+            ),
+    ),
+  );
+}
 }
 
 class _SupportedBody extends StatelessWidget {
@@ -241,6 +321,9 @@ class _SupportedBody extends StatelessWidget {
     required this.onSubmitCreds,
     required this.onRetry,
     required this.parsePid,
+    required this.manualPidCtl,   // temporary to test friend requests
+    required this.onGoManual,     // temporary to test friend requests
+    required this.onSubmitManualPid, // temporary to test friend requests
   });
 
   final _Step step;
@@ -256,6 +339,9 @@ class _SupportedBody extends StatelessWidget {
   final VoidCallback onSubmitCreds;
   final VoidCallback onRetry;
   final String Function(String) parsePid;
+  final TextEditingController manualPidCtl; // temporary to test friend requests
+  final VoidCallback onGoManual; // temporary to test friend requests
+  final VoidCallback onSubmitManualPid; // temporary to test friend requests
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +360,7 @@ class _SupportedBody extends StatelessWidget {
             onPick: onPickDevice,
             onRescan: onRescan,
             parsePid: parsePid,
+            onGoManual: onGoManual, // temporary to test friend requests
           ),
         _Step.scanningWifi => _StatusCard(
             icon: Icons.wifi_find,
@@ -299,6 +386,10 @@ class _SupportedBody extends StatelessWidget {
                 'Sending Wi-Fi credentials to ${parsePid(selectedDevice ?? '')}. This usually takes about 10 seconds.',
             spinner: true,
           ),
+        _Step.manualEntry => _ManualPidForm( // temporary to test friend requests
+          controller: manualPidCtl,
+          onSubmit: onSubmitManualPid,
+        ),
         _Step.success => _StatusCard(
             icon: Icons.check_circle_outline,
             title: 'PAIRED!',
@@ -309,6 +400,7 @@ class _SupportedBody extends StatelessWidget {
         _Step.error => _ErrorBody(
             message: errorMessage,
             onRetry: onRetry,
+            onGoManual: onGoManual, // temporary to test friend requests
           ),
       },
     );
@@ -375,11 +467,13 @@ class _DeviceList extends StatelessWidget {
     required this.onPick,
     required this.onRescan,
     required this.parsePid,
+    required this.onGoManual, // temporary to test friend requests
   });
   final List<String> devices;
   final ValueChanged<String> onPick;
   final VoidCallback onRescan;
   final String Function(String) parsePid;
+  final VoidCallback onGoManual; // temporary to test friend requests
 
   @override
   Widget build(BuildContext context) {
@@ -398,6 +492,11 @@ class _DeviceList extends StatelessWidget {
           OutlinedButton(
             onPressed: onRescan,
             child: const Text('SCAN AGAIN  ⟳'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: onGoManual,
+            child: const Text('ENTER PRINTER ID MANUALLY'),
           ),
         ],
       );
@@ -601,9 +700,14 @@ class _PasswordFormState extends State<_PasswordForm> {
 }
 
 class _ErrorBody extends StatelessWidget {
-  const _ErrorBody({required this.message, required this.onRetry});
+  const _ErrorBody({
+    required this.message, 
+    required this.onRetry,
+    required this.onGoManual, // temporary to test friend requests
+  });
   final String message;
   final VoidCallback onRetry;
+  final VoidCallback onGoManual; // temporary to test friend requests
 
   @override
   Widget build(BuildContext context) {
@@ -636,14 +740,26 @@ class _ErrorBody extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         OutlinedButton(onPressed: onRetry, child: const Text('TRY AGAIN  ⟳')),
+
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: onGoManual,
+          child: const Text('ENTER PRINTER ID MANUALLY'),
+        ),
       ],
     );
   }
 }
 
 class _UnsupportedBody extends StatelessWidget {
-  const _UnsupportedBody({required this.showCancel});
+  const _UnsupportedBody({
+    required this.showCancel,
+    required this.manualPidCtl, // temporary to test friend requests
+    required this.onSubmitManualPid, // temporary to test friend requests
+    });
   final bool showCancel;
+  final TextEditingController manualPidCtl; // temporary to test friend requests
+  final VoidCallback onSubmitManualPid; // temporary to test friend requests
 
   String get _platformName {
     if (kIsWeb) return 'the web';
@@ -695,6 +811,22 @@ class _UnsupportedBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
+          Text('PRINTER ID:', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 8),
+          TextField(
+            controller: manualPidCtl,
+            autofocus: false,
+            textCapitalization: TextCapitalization.characters,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(hintText: 'e.g. printer1'),
+            onSubmitted: (_) => onSubmitManualPid(),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: onSubmitManualPid,
+            child: const Text('ADD PRINTER  →'),
+          ),
+          const SizedBox(height: 24),
           if (showCancel)
             Builder(
               builder: (context) => OutlinedButton(
@@ -711,6 +843,54 @@ class _UnsupportedBody extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+class _ManualPidForm extends StatelessWidget {
+  const _ManualPidForm({
+    required this.controller,
+    required this.onSubmit,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Icon(Icons.print_outlined, size: 48, color: PrintimateColors.textDim),
+        const SizedBox(height: 16),
+        Text(
+          'ENTER PRINTER ID',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: 2),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Find the printer ID on the label on your printer.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: PrintimateColors.textDim),
+        ),
+        const SizedBox(height: 32),
+        Text('PRINTER ID:', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(hintText: 'e.g. printer1'),
+          onSubmitted: (_) => onSubmit(),
+        ),
+        const Spacer(),
+        OutlinedButton(
+          onPressed: onSubmit,
+          child: const Text('ADD PRINTER  →'),
+        ),
+      ],
     );
   }
 }

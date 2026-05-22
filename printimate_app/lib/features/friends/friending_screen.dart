@@ -218,7 +218,7 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
                       }),
                       onSubmitted: (_) => _sendRequest(),
                       decoration: InputDecoration(
-                        hintText: 'e.g. pid1',
+                        hintText: 'e.g. pid1-john123',
                         errorText: _error,
                       ),
                     ),

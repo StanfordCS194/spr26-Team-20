@@ -186,21 +186,31 @@ app.get("/status", (req, res) => {
   }
 });
 
-app.post("/setup", (req, res) => {
+app.post("/setup", async (req, res) => {
   let pid = req.query.pid as string;
   let uid = req.body.uid as string;
 
+  const printerDoc = await db.collection(Collections.printers).doc(pid).get();
+  
   //First we need to check if the printer is already owned.
-  var owner_uid: string | null = null;
-  /*
-    @Felipe: Fetch the owner_uid field from the database and store it in ownerUid.
-    */
-  if (owner_uid != null) {
-    res.status(403).send("Printer is already owned by another user");
-    return;
-  }
+  if (printerDoc.exists) {
+    const printerData = printerDoc.data();
+    const owner_uid = printerData?.ownerUid as string | null ?? null;
 
+    if (owner_uid != null) {
+      res.status(403).send("Printer is already owned by another user");
+      return;
+    }
+  }
+  const userDoc = await db.collection(Collections.users).doc(uid).get();
+  const userData = userDoc.data();
   //Next we want to assign this pid to to the uid
+  const ownedPids: string[] = userData?.ownedPids ?? [];
+  ownedPids.push(pid);
+  await db.collection(Collections.users).doc(uid).update({
+    ownedPids: ownedPids,
+  });
+  res.status(200).send("Printer setup complete");
 });
 
 /*
