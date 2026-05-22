@@ -16,6 +16,7 @@ import '../features/pairing/provisioning_screen.dart';
 import '../features/send/send_screen.dart';
 import '../services/app_preferences.dart';
 import '../features/friends/friending_screen.dart';
+import '../features/onboarding/add_friends_screen.dart';
 import 'theme.dart';
 
 bool get _canProvision {
@@ -28,6 +29,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   final prefs = ref.watch(appPreferencesProvider);
   final hasPrinter = ref.watch(
     onboardingProvider.select((s) => s.printerId.trim().isNotEmpty),
+  );
+  final onboardingDone = ref.watch(
+    onboardingProvider.select((s) => s.completed),
   );
   final selectedPrinterName = ref.watch(
     onboardingProvider.select((s) => s.printerId.trim()),
@@ -51,6 +55,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Splash is only valid while auth is loading.
       if (loc == '/splash') {
         if (!loggedIn) return seenTour ? '/auth' : '/intro';
+        if (!onboardingDone) return '/onboarding/profile';
         if (!hasPrinter && _canProvision) return '/provisioning';
         return '/home';
       }
@@ -67,7 +72,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Skip the tour and auth pages once signed in.
       if (loc == '/intro' || loc == '/auth') {
         if (hasPrinter) return '/home';
+        if (!onboardingDone) return '/onboarding/profile';
         return _canProvision ? '/provisioning' : '/home';
+      }
+      if (!onboardingDone && !loc.startsWith('/onboarding')) {
+        return '/onboarding/profile';
       }
       // Force first-time pairing only where BLE provisioning is possible.
       if (!hasPrinter &&
@@ -84,6 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/auth', builder: (_, __) => const SignInScreen()),
       GoRoute(path: '/onboarding/profile', builder: (_, __) => const ProfileScreen()),
       GoRoute(path: '/onboarding/printer', builder: (_, __) => const PrinterSetupScreen()),
+      GoRoute(path: '/onboarding/add_friends_screen', builder: (_, __) => const AddFriendsScreen()),
       GoRoute(path: '/provisioning', builder: (_, __) => const ProvisioningScreen()),
       GoRoute(path: '/home', builder: (_, __) => const HomeShell()),
       GoRoute(path: '/friends', builder: (_, __) => const FriendingScreen()),

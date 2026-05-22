@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../app/theme.dart';
 import 'auth_controller.dart';
@@ -17,27 +18,19 @@ class SignInScreen extends ConsumerStatefulWidget {
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   bool _busy = false;
   String? _error;
-  bool _isNewUser = false;
 
-  bool _isFirstTimeUser() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      debugPrint('=== _isFirstTimeUser: No user found ===');
-      return false;
-    }
-    final createdAt = user.metadata.creationTime;
-    final lastSignInAt = user.metadata.lastSignInTime;
-    debugPrint('=== _isFirstTimeUser: createdAt=$createdAt, lastSignInAt=$lastSignInAt ===');
-    if (createdAt == null || lastSignInAt == null) {
-      debugPrint('=== _isFirstTimeUser: Missing metadata ===');
-      return false;
-    }
-    final diff = createdAt.difference(lastSignInAt).abs().inSeconds;
-    debugPrint('=== _isFirstTimeUser: Time diff=$diff seconds ===');
-    // If account was created within 2 seconds of last sign-in, it's a new account
-    final isNew = diff <= 2;
-    debugPrint('=== _isFirstTimeUser: Result=$isNew ===');
-    return isNew;
+  Future<String> _getRoute() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return '/home';
+  
+  final snap = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .get();
+  
+  // No doc or no username means they haven't completed onboarding
+  final hasUsername = snap.exists && snap.data()?['username'] != null;
+  return hasUsername ? '/home' : '/onboarding/profile';
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -48,9 +41,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     try {
       await action();
       if (mounted) {
-        _isNewUser = _isFirstTimeUser();
-        debugPrint('=== Sign in complete. Is new user: $_isNewUser ===');
-        final route = _isNewUser ? '/onboarding/profile' : '/home';
+        final route = await _getRoute();
         debugPrint('Navigating to: $route');
         context.go(route);
       }
@@ -74,8 +65,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       builder: (_) => _EmailAuthSheet(controller: ctl),
     );
     if (result == 'ok' && mounted) {
-      _isNewUser = _isFirstTimeUser();
-      final route = _isNewUser ? '/onboarding/profile' : '/home';
+      final route = await _getRoute();
       context.go(route);
     } else if (result != null && result.isNotEmpty && result != 'ok') {
       if (mounted) setState(() => _error = result);
