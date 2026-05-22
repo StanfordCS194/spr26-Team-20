@@ -202,6 +202,10 @@ app.post("/setup", async (req, res) => {
       return;
     }
   }
+  await db.collection(Collections.printers).doc(pid).set({
+    ownerUid: uid,
+    onlineStatus: false,
+  }, { merge: true });
   const userDoc = await db.collection(Collections.users).doc(uid).get();
   const userData = userDoc.data();
   //Next we want to assign this pid to to the uid
