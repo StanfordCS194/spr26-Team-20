@@ -6,6 +6,13 @@ final firestoreProvider = Provider<FirebaseFirestore>(
   (_) => FirebaseFirestore.instance,
 );
 
+final userProfileDocProvider =
+    StreamProvider.family<DocumentSnapshot<Map<String, dynamic>>, String>(
+  (ref, uid) {
+    return ref.watch(firestoreProvider).collection('users').doc(uid).snapshots();
+  },
+);
+
 class UserProfileRepository {
   UserProfileRepository(this._db);
   final FirebaseFirestore _db;
@@ -19,9 +26,18 @@ class UserProfileRepository {
         .get();
     return snap.docs.isNotEmpty;
   }
+  Future<Map<String, dynamic>?> findByUsername(String username) async {
+  final snap = await _users
+      .where('username', isEqualTo: username.toLowerCase().trim())
+      .limit(1)
+      .get();
+  if (snap.docs.isEmpty) return null;
+  return snap.docs.first.data();
+  }
   Future<void> setUsername(String uid, String username) async {
     await _users.doc(uid).update({'username': username});
   }
+  
   Future<void> upsertFromAuth(User user) async {
     final doc = _users.doc(user.uid);
     final now = FieldValue.serverTimestamp();
@@ -37,7 +53,7 @@ class UserProfileRepository {
       final suffix = user.uid.substring(0, 4);
       defaultUsername = '${base}_$suffix';
     }
-
+    
 
     final data = <String, dynamic>{
       'uid': user.uid,

@@ -20,17 +20,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   String? _error;
 
   Future<String> _getRoute() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return '/home';
-  
-  final snap = await FirebaseFirestore.instance
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return '/auth';
+
+    final snap = await FirebaseFirestore.instance
       .collection('users')
       .doc(user.uid)
       .get();
-  
-  // No doc or no username means they haven't completed onboarding
-  final hasUsername = snap.exists && snap.data()?['username'] != null;
-  return hasUsername ? '/home' : '/onboarding/profile';
+
+    final hasUsername =
+      (snap.data()?['username'] as String?)?.trim().isNotEmpty ?? false;
+    return hasUsername ? '/home' : '/onboarding/profile';
   }
 
   Future<void> _run(Future<void> Function() action) async {

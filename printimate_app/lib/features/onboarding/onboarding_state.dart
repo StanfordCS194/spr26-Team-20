@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../services/app_preferences.dart';
+
 class OnboardingState {
   const OnboardingState({this.name = '', this.printerId = '', this.friendIds = const [], this.completed = false});
   final String name;
@@ -21,10 +23,16 @@ class OnboardingState {
 
 class OnboardingController extends Notifier<OnboardingState> {
   @override
-  OnboardingState build() => const OnboardingState();
+  OnboardingState build() {
+    final prefs = ref.read(appPreferencesProvider);
+    return OnboardingState(printerId: prefs.savedPrinterId);
+  }
 
   void setName(String v) => state = state.copyWith(name: v);
-  void setPrinterId(String v) => state = state.copyWith(printerId: v);
+  void setPrinterId(String v) {
+    state = state.copyWith(printerId: v);
+    ref.read(appPreferencesProvider).setSavedPrinterId(v);
+  }
   void setFriends(List<String> ids) => state = state.copyWith(friendIds: ids);
   void complete() => state = state.copyWith(completed: true);
 }

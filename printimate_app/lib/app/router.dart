@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_controller.dart';
 import '../features/auth/sign_in_screen.dart';
+import '../features/auth/user_profile_repository.dart';
 import '../features/home/home_shell.dart';
 import '../features/onboarding/intro_screen.dart';
 import '../features/onboarding/onboarding_state.dart';
@@ -27,11 +28,11 @@ bool get _canProvision {
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authStateProvider);
   final prefs = ref.watch(appPreferencesProvider);
+  final profile = auth.value == null
+      ? null
+      : ref.watch(userProfileDocProvider(auth.value!.uid));
   final hasPrinter = ref.watch(
     onboardingProvider.select((s) => s.printerId.trim().isNotEmpty),
-  );
-  final onboardingDone = ref.watch(
-    onboardingProvider.select((s) => s.completed),
   );
   final selectedPrinterName = ref.watch(
     onboardingProvider.select((s) => s.printerId.trim()),
@@ -45,8 +46,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Wait for Firebase Auth to hydrate before deciding anything.
       if (auth.isLoading) return loc == '/splash' ? null : '/splash';
 
+      if (auth.value != null && profile?.isLoading == true) {
+        return loc == '/splash' ? null : '/splash';
+      }
+
       final loggedIn = auth.value != null;
       final seenTour = prefs.hasSeenIntroTour;
+      final profileData = profile?.value?.data();
+      final hasUsername =
+          (profileData?['username'] as String?)?.trim().isNotEmpty ?? false;
 
       // Legacy redirects.
       const legacy = {'/profile', '/history'};
@@ -55,7 +63,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Splash is only valid while auth is loading.
       if (loc == '/splash') {
         if (!loggedIn) return seenTour ? '/auth' : '/intro';
-        if (!onboardingDone) return '/onboarding/profile';
+        if (!hasUsername) return '/onboarding/profile';
         if (!hasPrinter && _canProvision) return '/provisioning';
         return '/home';
       }
@@ -71,11 +79,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Logged in.
       // Skip the tour and auth pages once signed in.
       if (loc == '/intro' || loc == '/auth') {
+        if (!hasUsername) return '/onboarding/profile';
         if (hasPrinter) return '/home';
-        if (!onboardingDone) return '/onboarding/profile';
         return _canProvision ? '/provisioning' : '/home';
       }
-      if (!onboardingDone && !loc.startsWith('/onboarding')) {
+      if (!hasUsername && !loc.startsWith('/onboarding')) {
         return '/onboarding/profile';
       }
       // Force first-time pairing only where BLE provisioning is possible.
