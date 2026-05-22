@@ -87,5 +87,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSContactsUsageDescription</key>
+	<string>Used to find friends with receipt printers</string>
 </dict>
 </plist>

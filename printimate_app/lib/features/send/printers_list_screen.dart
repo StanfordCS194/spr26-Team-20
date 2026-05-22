@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
@@ -204,6 +205,30 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
                             ),
                           ],
                         ),
+            ),
+            // ── Bottom buttons ───────────────────────────────────────────────
+          const Divider(color: PrintimateColors.border, height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.person_add_outlined, size: 16),
+                      label: const Text("Add a friend's printer"),
+                      onPressed: () => context.push('/friends'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/provisioning'),
+                      icon: const Icon(Icons.add_circle_outline, size: 16),
+                      label: const Text('Add my own printer'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

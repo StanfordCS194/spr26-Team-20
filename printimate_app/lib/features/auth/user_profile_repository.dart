@@ -12,12 +12,36 @@ class UserProfileRepository {
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _db.collection('users');
-
+  Future<bool> isUsernameTaken(String username) async {
+    final snap = await _users
+        .where('username', isEqualTo: username)
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty;
+  }
+  Future<void> setUsername(String uid, String username) async {
+    await _users.doc(uid).update({'username': username});
+  }
   Future<void> upsertFromAuth(User user) async {
     final doc = _users.doc(user.uid);
     final now = FieldValue.serverTimestamp();
+    final snap = await doc.get();
+    
+    final isNew = !snap.exists;
+    String? defaultUsername;
+    if (isNew) {
+      final base = (user.displayName?.replaceAll(' ', '').toLowerCase() ??
+              user.email?.split('@').first.toLowerCase() ??
+              'user')
+          .replaceAll(RegExp(r'[^a-z0-9_]'), '');
+      final suffix = user.uid.substring(0, 4);
+      defaultUsername = '${base}_$suffix';
+    }
+
+
     final data = <String, dynamic>{
       'uid': user.uid,
+      if (isNew && defaultUsername != null) 'username': defaultUsername,
       'email': user.email,
       'displayName': user.displayName,
       'photoURL': user.photoURL,
@@ -28,13 +52,9 @@ class UserProfileRepository {
       'tenantId': user.tenantId,
       'updatedAt': now,
       'lastSignInAt': now,
-      'createdAt': FieldValue.serverTimestamp(),
+      if (isNew) 'createdAt': FieldValue.serverTimestamp(),
     };
-
-    final snap = await doc.get();
-    if (snap.exists) {
-      data.remove('createdAt');
-    }
+    
     await doc.set(data, SetOptions(merge: true));
   }
 }
