@@ -3,12 +3,12 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "firebase-admin": "^13.0.0"
+    "firebase-admin": "^10.3.0"
   },
   "engines": {
-"node": "20.20.x",
-"npm": "11.x"
-},
+    "node": "20.20.x",
+    "npm": "11.x"
+  },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
