@@ -1,3 +1,4 @@
+import 'dart:async' show TimeoutException;
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -155,12 +156,9 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       _errorMessage = '';
     });
     try {
-      final ok = await _ble.provisionWifi(
-        device,
-        _kDemoPop,
-        ssid,
-        _passwordCtl.text,
-      );
+      final ok = await _ble
+          .provisionWifi(device, _kDemoPop, ssid, _passwordCtl.text)
+          .timeout(const Duration(seconds: 20));
       if (!mounted) return;
       if (ok == true) {
         ref.read(onboardingProvider.notifier).setPrinterId(_parsePid(device));
@@ -171,10 +169,15 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       } else {
         setState(() {
           _step = _Step.error;
-          _errorMessage =
-              'Printer rejected the credentials. Check the Wi-Fi password and try again.';
+          _errorMessage = 'Wrong password — the printer is restarting. Tap TRY AGAIN in a few seconds to scan again.';
         });
       }
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _step = _Step.error;
+        _errorMessage = 'Wrong password — the printer is restarting. Tap TRY AGAIN in a few seconds to scan again.';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
