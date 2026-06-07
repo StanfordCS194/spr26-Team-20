@@ -6,11 +6,8 @@
     "firebase-admin": "^13.0.0"
   },
   "engines": {
-  "node": "20.x"
-  },
-  "overrides": {
-"gcp-metadata": "8.1.2",
-"google-auth-library": "10.7.0"
+"node": "20.20.x",
+"npm": "11.x"
 },
   "devDependencies": {
     "@types/cors": "^2.8.19",
