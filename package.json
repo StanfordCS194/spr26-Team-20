@@ -16,6 +16,6 @@
   "scripts": {
     "dev": "tsx watch server.ts",
     "build": "tsc",
-    "start": "npm --prefix server start"
+    "start": "node server.js"
   }
 }
