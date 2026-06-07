@@ -141,6 +141,8 @@ app.get("/messages", async (req, res) => {
       };
     });
 
+    
+
     // Mark returned messages as printed in Firestore so they aren't re-sent.
     if (unprintedDocs.length > 0) {
       const batch = db.batch();
