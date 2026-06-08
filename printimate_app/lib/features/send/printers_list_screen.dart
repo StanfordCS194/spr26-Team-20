@@ -63,12 +63,10 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
         return;
       }
 
+      final uri = Uri.parse('${Config.serverBaseUrl}/printers-list')
+          .replace(queryParameters: {'uid': user.uid});
       final response = await http
-          .get(
-            Uri.parse('${Config.serverBaseUrl}/printers-list'),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({'uid': user.uid}),
-          )
+          .get(uri, headers: const {'Content-Type': 'application/json'})
           .timeout(const Duration(seconds: 5));
       
       if (!mounted) return;

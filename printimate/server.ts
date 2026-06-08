@@ -468,38 +468,6 @@ app.get("/get-friend-requests", async (req, res) => {
     res.status(500).send("Failed to fetch friend requests");
   }
 });
-
-
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-
-  const localIPs = getLocalIPv4Addresses();
-  if (localIPs.length > 0) {
-    for (const ip of localIPs) {
-      console.log(`Server also available at http://${ip}:${port}`);
-    }
-  } else {
-    console.log("No active external IPv4 address found.");
-  }
-});
-
-function getLocalIPv4Addresses(): string[] {
-  const nets = networkInterfaces();
-  const addresses = new Set<string>();
-
-  for (const netInfoList of Object.values(nets)) {
-    if (!netInfoList) continue;
-
-    for (const netInfo of netInfoList) {
-      if (netInfo.family === "IPv4" && !netInfo.internal) {
-        addresses.add(netInfo.address);
-      }
-    }
-  }
-
-  return [...addresses];
-}
-
 app.get("/printers-list", async (req, res) => {
   const uid = req.query.uid as string;
 
@@ -549,4 +517,36 @@ app.get("/printer-exists", async (req, res) => {
     res.status(500).send("Failed to check printer");
   }
 });
+
+
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+
+  const localIPs = getLocalIPv4Addresses();
+  if (localIPs.length > 0) {
+    for (const ip of localIPs) {
+      console.log(`Server also available at http://${ip}:${port}`);
+    }
+  } else {
+    console.log("No active external IPv4 address found.");
+  }
+});
+
+function getLocalIPv4Addresses(): string[] {
+  const nets = networkInterfaces();
+  const addresses = new Set<string>();
+
+  for (const netInfoList of Object.values(nets)) {
+    if (!netInfoList) continue;
+
+    for (const netInfo of netInfoList) {
+      if (netInfo.family === "IPv4" && !netInfo.internal) {
+        addresses.add(netInfo.address);
+      }
+    }
+  }
+
+  return [...addresses];
+}
 
