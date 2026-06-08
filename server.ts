@@ -16,18 +16,20 @@ import type { MessageDocument } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const envDir = join(__dirname, "env");
-const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
+let serviceAccount: object;
 
-const envFile = envFiles[0];
-if (!envFile) {
-  throw new Error("No JSON files found in env directory");
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  const envDir = join(__dirname, "env");
+  const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
+  const envFile = envFiles[0];
+  if (!envFile) {
+    throw new Error("No JSON files found in env directory and FIREBASE_SERVICE_ACCOUNT env var is not set");
+  }
+  const serviceAccountPath = join(envDir, envFile);
+  serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
 }
-
-const serviceAccountPath = join(envDir, envFile);
-
-const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
-
 const adminApp = initializeApp({
   credential: cert(serviceAccount),
 });
