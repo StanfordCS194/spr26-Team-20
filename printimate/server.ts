@@ -1,4 +1,5 @@
 // @ts-check
+// server.ts - Modify this
 
 import express from "express";
 import cors from "cors";
@@ -14,6 +15,8 @@ import { getFirestore } from "firebase-admin/firestore";
 
 import { Collections } from "./database_names.js";
 import type { MessageDocument, MessageImage } from "./database_names.js";
+
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -180,7 +183,7 @@ app.get("/status", (req, res) => {
    * @Felipe: Get the online_status field from the database and store it in isOnline.
    */
   if (isOnline) {
-    res.send(200).json({ status: "Printer is online" });
+    res.status(200).json({ status: "Printer is online" });
   } else {
     res.status(503).json({ status: "Printer is offline" });
   }
