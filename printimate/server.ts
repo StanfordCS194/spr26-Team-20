@@ -500,8 +500,8 @@ function getLocalIPv4Addresses(): string[] {
   return [...addresses];
 }
 
-app.post("/printers-list", async (req, res) => {
-  const uid = req.body.uid as string;
+app.get("/printers-list", async (req, res) => {
+  const uid = req.query.uid as string;
 
   if (!uid) {
     res.status(400).send("Missing required field: uid");

@@ -102,28 +102,22 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    // You need the PIDs this user owns — fetch from /printers-list first
-    final listRes = await http.post(
-      Uri.parse('${Config.serverBaseUrl}/printers-list'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'uid': currentUser.uid}),
+    final res = await http.get(
+      Uri.parse('${Config.serverBaseUrl}/get-friend-requests?uid=${currentUser.uid}'),
     );
-    if (listRes.statusCode != 200) return;
-    final List<String> pids =
-        List<String>.from(jsonDecode(listRes.body)['printers']);
+    if (res.statusCode != 200) return;
 
+    final List<dynamic> requests = jsonDecode(res.body)['requests'];
     final List<_FriendRequest> loaded = [];
-    for (final pid in pids) {
-      final res = await http.get(
-        Uri.parse('${Config.serverBaseUrl}/get-permission-requests?pid=$pid'),
-      );
-      if (res.statusCode != 200) continue;
-      final List<String> uids =
-          List<String>.from(jsonDecode(res.body)['fromUid']);
+
+    for (final entry in requests) {
+      final String pid = entry['pid'];
+      final List<String> uids = List<String>.from(entry['fromUid']);
       for (final uid in uids) {
         loaded.add(_FriendRequest(username: uid, uid: uid, printer_name: pid));
       }
     }
+
     setState(() {
       _requests.clear();
       _requests.addAll(loaded);

@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
 import '../send/send_screen.dart';
+import '../../app/config.dart';
+
 
 
 /// A single printer entry returned by the backend.
@@ -62,7 +64,7 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
       }
 
       final response = await http
-          .post(
+          .get(
             Uri.parse('${Config.serverBaseUrl}/printers-list'),
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode({'uid': user.uid}),
