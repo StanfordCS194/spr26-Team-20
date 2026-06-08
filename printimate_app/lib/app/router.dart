@@ -18,6 +18,7 @@ import '../features/send/send_screen.dart';
 import '../services/app_preferences.dart';
 import '../features/friends/friending_screen.dart';
 import '../features/onboarding/add_friends_screen.dart';
+import '../features/friends/friend_requests.dart';
 import 'theme.dart';
 
 bool get _canProvision {
@@ -105,6 +106,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/provisioning', builder: (_, __) => const ProvisioningScreen()),
       GoRoute(path: '/home', builder: (_, __) => const HomeShell()),
       GoRoute(path: '/friends', builder: (_, __) => const FriendingScreen()),
+      GoRoute(path: '/friend_requests', builder: (_, __) => const FriendRequestsScreen()),
       GoRoute(
         path: '/send',
         builder: (_, __) => SendScreen(

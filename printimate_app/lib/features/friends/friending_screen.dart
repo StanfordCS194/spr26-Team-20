@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,8 +10,8 @@ import 'package:http/http.dart' as http;
 import '../../app/theme.dart';
 import '../auth/user_profile_repository.dart';
 import '../onboarding/onboarding_state.dart';
+import '../../app/config.dart';
 
-const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
 
 class FriendingScreen extends ConsumerStatefulWidget {
   const FriendingScreen({super.key});
@@ -119,7 +120,7 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
     try {
       // Check if printer exists via server
       final checkResponse = await http.get(
-        Uri.parse('$_defaultServerUrl/printer-exists?pid=$pid'),
+        Uri.parse('$Config.serverUrl/printer-exists?pid=$pid'),
       ).timeout(const Duration(seconds: 5));
 
       if (checkResponse.statusCode != 200) {
@@ -137,7 +138,7 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
 
       // Send permission request
       final response = await http.post(
-        Uri.parse('$_defaultServerUrl/send-permission-request?pid=$pid'),
+        Uri.parse('$Config.serverUrl/send-permission-request?pid=$pid'),
         headers: const {'Content-Type': 'application/json'},
         body: jsonEncode({'fromUid': uid}),
       ).timeout(const Duration(seconds: 5));

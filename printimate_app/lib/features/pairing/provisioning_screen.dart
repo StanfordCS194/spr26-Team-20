@@ -239,12 +239,13 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   Future<void> _submitManualPid() async {
     final pid = _manualPidCtl.text.trim();
     if (pid.isEmpty) return;
+
     final username = await _fetchUsername();
     final fullPid = username != null ? '$pid-$username' : pid;
+
     await _callSetup(fullPid);
     ref.read(onboardingProvider.notifier).setPrinterId(fullPid);
-    setState(() => _step = _Step.success);
-    await Future.delayed(const Duration(milliseconds: 1200));
+  
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -818,7 +819,7 @@ class _UnsupportedBody extends StatelessWidget {
             autofocus: false,
             textCapitalization: TextCapitalization.characters,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(hintText: 'e.g. printer1'),
+            decoration: const InputDecoration(hintText: 'e.g. printer1 (username appended automatically)'),
             onSubmitted: (_) => onSubmitManualPid(),
           ),
           const SizedBox(height: 12),
@@ -880,7 +881,6 @@ class _ManualPidForm extends StatelessWidget {
         TextField(
           controller: controller,
           autofocus: true,
-          textCapitalization: TextCapitalization.characters,
           textInputAction: TextInputAction.done,
           decoration: const InputDecoration(hintText: 'e.g. printer1'),
           onSubmitted: (_) => onSubmit(),

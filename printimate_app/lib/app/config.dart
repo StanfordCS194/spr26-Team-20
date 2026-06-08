@@ -1,7 +1,7 @@
 /// Global configuration constants accessible across all features.
 class Config {
   /// Server API base URL (change based on environment)
-  static const String serverBaseUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
+  static const String serverBaseUrl = 'https://printimate-fb97067bf83c.herokuapp.com';
 
   static const String printerId= 'printer1'; // Example printer ID for pairing/config
   

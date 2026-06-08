@@ -10,7 +10,6 @@ import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
 import '../send/send_screen.dart';
 
-const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
 
 /// A single printer entry returned by the backend.
 class _Printer {
@@ -42,6 +41,7 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
   }
 
   Future<void> _loadPrinters() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -50,6 +50,7 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
+        if (!mounted) return;
         setState(() {
           _printers
             ..clear()
@@ -62,11 +63,13 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
 
       final response = await http
           .post(
-            Uri.parse('$_defaultServerUrl/printers-list'),
+            Uri.parse('${Config.serverBaseUrl}/printers-list'),
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode({'uid': user.uid}),
           )
           .timeout(const Duration(seconds: 5));
+      
+      if (!mounted) return;
 
       if (response.statusCode != 200) {
         throw Exception('Server returned ${response.statusCode}: ${response.body}');
@@ -85,6 +88,7 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _printers
           ..clear()

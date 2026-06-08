@@ -73,12 +73,20 @@ class _HomeShellState extends State<HomeShell> {
                   ),
                   const Spacer(),
                   Tooltip(
-                    message: 'Add another printer',
+                    message: 'Friend Requests',
                     child: IconButton(
-                      icon: const Icon(Icons.add, color: PrintimateColors.text),
-                      onPressed: () => context.push('/provisioning'),
+                      icon: const Icon(Icons.favorite_border, color: PrintimateColors.text),
+                      onPressed: () => context.push('/friend_requests'),
                     ),
                   ),
+                  // TODO: implement notifications and re-enable this button.
+                  // Tooltip(
+                  //   message: 'Notifications',
+                  //   child: IconButton(
+                  //     icon: const Icon(Icons.notifications_outlined, color: PrintimateColors.text),
+                  //     onPressed: () => context.push('/notifications'),
+                  //   ),
+                  // ),
                 ],
               ),
             ),

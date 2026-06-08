@@ -21,19 +21,20 @@ import type { MessageDocument, MessageImage } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-function getServiceAccount(): ServiceAccount {
-  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
-  if (b64) {
-    const json = Buffer.from(b64, "base64").toString("utf8");
-    console.log("Decoded service account JSON:", json);
-    return JSON.parse(json) as ServiceAccount;
+let serviceAccount: object;
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  const envDir = join(__dirname, "env");
+  const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
+  const envFile = envFiles[0];
+  if (!envFile) {
+    throw new Error("No JSON files found in env directory and FIREBASE_SERVICE_ACCOUNT env var is not set");
   }
-
-  // Optional local fallback for dev only
-  throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
+  const serviceAccountPath = join(envDir, envFile);
+  serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
 }
-const serviceAccount = getServiceAccount();
-
 const adminApp = initializeApp({
   credential: cert(serviceAccount),
 });
@@ -41,7 +42,7 @@ const adminApp = initializeApp({
 const db = getFirestore(adminApp);
 
 const app = express();
-const port = process.env.PORT;
+const port = process.env.PORT || 3000;
 
 app.use(cors({
   origin: '*',
@@ -131,9 +132,17 @@ app.get("/messages", async (req, res) => {
       .collection(Collections.messages)
       .get();
 
-    const messages: Message[] = querySnapshot.docs.map((doc: any) => {
-      const data = doc.data() as MessageDocument;
+    if (querySnapshot.docs.length === 0) {
+      res.status(200).send("Message not found");
+      return;
+    }
 
+    const unprintedDocs = querySnapshot.docs.filter(
+      (doc) => !(doc.data() as MessageDocument).printed
+    );
+
+    const outputMessages: Message[] = unprintedDocs.map((doc) => {
+      const data = doc.data() as MessageDocument;
       return {
         authorUid: data.authorUid,
         destinationPid: data.destinationPid,
@@ -148,23 +157,18 @@ app.get("/messages", async (req, res) => {
       };
     });
 
-    //If no messages are found then we want to return a 404 error.
-    if (messages.length === 0) {
-      res.status(200).send("Message not found");
-      return;
+    
+
+    // Mark returned messages as printed in Firestore so they aren't re-sent.
+    if (unprintedDocs.length > 0) {
+      const batch = db.batch();
+      for (const doc of unprintedDocs) {
+        batch.update(doc.ref, { printed: true });
+      }
+      await batch.commit();
     }
 
-    //We have all the messages this printer has recieved, we want to filter out the messages that have already been printed and return the rest.
-    var outputMessage : Message[] = [];
-    for (const message of messages) {
-        if(message.printed) {
-            continue;
-        }
-      
-        outputMessage.push(message);
-    }
-
-    res.json(outputMessage);
+    res.json(outputMessages);
   } catch (error) {
     console.error("Failed to fetch messages", error);
     res.status(500).send("Failed to fetch messages");
@@ -415,7 +419,55 @@ app.post("/reject-permission-request", async (req, res) => {
 });
 
 
+app.get("/get-friend-requests", async (req, res) => {
+  const uid = req.query.uid as string;
 
+  if (!uid) {
+    res.status(400).send("Missing required field: uid");
+    return;
+  }
+
+  try {
+    // Get all printers owned by this user
+    const userDoc = await db.collection(Collections.users).doc(uid).get();
+
+    if (!userDoc.exists) {
+      res.status(404).send("User not found");
+      return;
+    }
+
+    const userData = userDoc.data();
+    const ownedPids: string[] = userData?.ownedPids ?? [];
+
+    if (ownedPids.length === 0) {
+      res.status(200).json({ requests: [] });
+      return;
+    }
+
+    // For each owned printer, fetch pending permission requests
+    const results: { pid: string; fromUid: string[] }[] = [];
+
+    for (const pid of ownedPids) {
+      const requestDoc = await db
+        .collection(Collections.permissionRequests)
+        .doc(pid)
+        .get();
+
+      if (requestDoc.exists) {
+        const data = requestDoc.data();
+        const fromUid: string[] = data?.fromUid ?? [];
+        if (fromUid.length > 0) {
+          results.push({ pid, fromUid });
+        }
+      }
+    }
+
+    res.status(200).json({ requests: results });
+  } catch (error) {
+    console.error("Error fetching friend requests", error);
+    res.status(500).send("Failed to fetch friend requests");
+  }
+});
 
 
 app.listen(port, () => {

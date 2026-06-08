@@ -3,8 +3,7 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "firebase": "^12.12.1",
-    "firebase-admin": "^10.3.0"
+    "firebase-admin": "^13.10.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -16,6 +15,7 @@
   "scripts": {
     "dev": "tsx watch server.ts",
     "build": "tsc",
-    "start": "node server.js"
+    "heroku-postbuild": "npm run build",
+    "start": "node dist/server.js"
   }
 }
