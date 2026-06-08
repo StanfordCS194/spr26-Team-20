@@ -88,6 +88,12 @@
 #define PRINTIMATE_NVS_KEY_POP       "ble_pop"
 #define PRINTIMATE_NVS_KEY_TOKEN     "dev_token"
 
+// ---- Printer hardware -------------------------------------------------------
+#define PRINTIMATE_PRINTER_WIDTH_PX  384   // print head width in pixels
+
+// ---- Printer main polling interval ------------------------------------------
+#define PRINTIMATE_PRINTER_POLL_INTERVAL_MS  5000
+
 // ---- Printer connection health ----------------------------------------------
 // If this many consecutive fetch attempts fail, the device assumes connectivity
 // has been lost and transitions back to Reconnecting to re-establish the link.
@@ -97,8 +103,12 @@
 // Enforced at firmware boundary; the backend should enforce these too so we
 // never receive anything larger. See Felipe's backend spec.
 #define PRINTIMATE_MAX_TEXT_CHARS           500
-#define PRINTIMATE_MAX_IMAGE_BYTES          (200 * 1024)  // 200 KB after 1-bit dither
+#define PRINTIMATE_MAX_IMAGE_HEIGHT_PX      800
+#define PRINTIMATE_MAX_IMAGE_BYTES          (PRINTIMATE_PRINTER_WIDTH_PX * PRINTIMATE_MAX_IMAGE_HEIGHT_PX / 6)  // 1 bit per pixel, base 64 encoding
 #define PRINTIMATE_MAX_IMAGES_PER_MESSAGE   4
+
+// Maximum bytes for a single HTTP response body (messages endpoint).
+#define PRINTIMATE_MAX_RESPONSE_BYTES       (PRINTIMATE_MAX_IMAGE_BYTES + PRINTIMATE_MAX_TEXT_CHARS + 1000)  // 1000 for JSON overhead and metadata
 
 // ---- Debug helpers ----------------------------------------------------------
 // Use PRINTIMATE_LOG_* rather than Serial.print directly so we can route logs
