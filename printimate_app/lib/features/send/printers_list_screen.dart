@@ -1,15 +1,12 @@
-import 'dart:convert';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
 import '../send/send_screen.dart';
-import '../../app/config.dart';
+import '../../app/api.dart';
 
 
 
@@ -63,23 +60,7 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
         return;
       }
 
-      final uri = Uri.parse('${Config.serverBaseUrl}/printers-list')
-          .replace(queryParameters: {'uid': user.uid});
-      final response = await http
-          .get(uri, headers: const {'Content-Type': 'application/json'})
-          .timeout(const Duration(seconds: 5));
-      
-      if (!mounted) return;
-
-      if (response.statusCode != 200) {
-        throw Exception('Server returned ${response.statusCode}: ${response.body}');
-      }
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final printerIds = (data['printers'] as List? ?? const [])
-          .cast<dynamic>()
-          .map((value) => value.toString())
-          .toList();
+      final printerIds = await fetchPrintersList(user.uid);
 
       setState(() {
         _printers

@@ -160,6 +160,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     final device = _selectedDevice;
     final ssid = _selectedSsid;
     if (device == null || ssid == null) return;
+    final savedRef = ref;
     setState(() {
       _step = _Step.provisioning;
       _errorMessage = '';
@@ -177,7 +178,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
         final username = await _fetchUsername();
         final fullPid = username != null ? '$pid-$username' : pid;
         await _callSetup(fullPid);
-        ref.read(onboardingProvider.notifier).setPrinterId(fullPid);
+        savedRef.read(onboardingProvider.notifier).setPrinterId(fullPid);
         setState(() => _step = _Step.success);
         await Future.delayed(const Duration(milliseconds: 1200));
         if (mounted) context.go('/home');
