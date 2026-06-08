@@ -15,7 +15,7 @@ import '../onboarding/onboarding_state.dart';
 import 'drawing_canvas.dart';
 
 const int _printerWidthPx = 384;
-const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
+const String _defaultServerUrl = 'http://10.29.35.15:3000';
 
 enum _Source { text, photo, draw }
 
@@ -47,6 +47,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   _Source _source = _Source.text;
   Uint8List? _previewBytes;
   Uint8List? _selectedRawBytes;
+  _ProcessedImage? _processedImage;
   bool _processing = false;
   bool _sending = false;
   String _sendStatus = '';
@@ -134,12 +135,13 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         setState(() => _error = 'Animated images aren\'t supported.');
         return;
       }
-      final preview = await compute(_grayscaleOnly, raw);
+      final processed = await compute(_resizeGrayscaleDither, raw);
       if (!mounted) return;
       setState(() {
-        _previewBytes = preview;
+        _processedImage = processed;
+        _previewBytes = processed.previewPng;
         _selectedRawBytes = raw;
-        _info = '${probed.width}×${probed.height}px';
+        _info = '${processed.width}×${processed.height}px';
       });
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not load image: $e');
@@ -152,6 +154,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     setState(() {
       _previewBytes = null;
       _selectedRawBytes = null;
+      _processedImage = null;
       _info = null;
     });
   }
@@ -175,6 +178,14 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       _error = null;
     });
     try {
+      final destinationPid = _printerIdCtl.text.trim().isNotEmpty
+          ? _printerIdCtl.text.trim()
+          : ref.read(onboardingProvider).printerId.trim();
+      if (destinationPid.isEmpty) {
+        setState(() => _error = 'Set a printer ID in onboarding first.');
+        return;
+      }
+
       Uint8List rawForPipeline;
 
       switch (_source) {
@@ -193,12 +204,38 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           );
           break;
         case _Source.photo:
-          if (_selectedRawBytes == null) {
+          if (_processedImage == null) {
             setState(() => _error = 'Attach an image first.');
             return;
           }
-          rawForPipeline = _selectedRawBytes!;
-          break;
+          // Already processed at pick time — skip reprocessing.
+          setState(() => _sendStatus = 'SENDING TO SERVER...');
+          final user = FirebaseAuth.instance.currentUser!;
+          final response = await http.post(
+            Uri.parse('$_serverUrl/send?pid=$destinationPid'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'authorUid': user.uid,
+              'authorName': user.displayName ?? 'Unknown',
+              'messageText': '',
+              'images': [
+                {
+                  'width': _processedImage!.width,
+                  'height': _processedImage!.height,
+                  'bitmap': _processedImage!.bitmapBase64,
+                },
+              ],
+            }),
+          );
+          if (response.statusCode != 201) {
+            throw Exception('Server returned ${response.statusCode}: ${response.body}');
+          }
+          if (!mounted) return;
+          _clearImage();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Sent → $destinationPid')),
+          );
+          return;
         case _Source.draw:
           if (_drawingController.isEmpty) {
             setState(() => _error = 'Draw something first.');
@@ -215,14 +252,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
       setState(() => _sendStatus = 'PROCESSING IMAGE...');
       final processed = await _processForReceiptPrinter(rawForPipeline);
-
-      final destinationPid = _printerIdCtl.text.trim().isNotEmpty
-          ? _printerIdCtl.text.trim()
-          : ref.read(onboardingProvider).printerId.trim();
-      if (destinationPid.isEmpty) {
-        setState(() => _error = 'Set a printer ID in onboarding first.');
-        return;
-      }
 
       setState(() => _sendStatus = 'SENDING TO SERVER...');
       final user = FirebaseAuth.instance.currentUser!;
@@ -563,7 +592,7 @@ class _ImagePreview extends StatelessWidget {
 // Hard cap on print height (px). 1024 px ≈ 12 cm of paper at the printer's
 // vertical density. Prevents a misclicked panorama from chewing through the
 // roll for 30 seconds.
-const int _maxPrintHeightPx = 1024;
+const int _maxPrintHeightPx = 800;
 
 class _ProcessedImage {
   const _ProcessedImage({
@@ -571,6 +600,7 @@ class _ProcessedImage {
     required this.bitmapBase64,
     required this.width,
     required this.height,
+    required this.previewPng,
   });
   // Packed 1-bit-per-pixel bitmap, MSB-first within each byte, 1 = black.
   // Bytes per row = width / 8. Ready to hand to Adafruit_Thermal::printBitmap
@@ -579,6 +609,8 @@ class _ProcessedImage {
   final String bitmapBase64;
   final int width;
   final int height;
+  // 8-bit grayscale PNG expanded from the 1bpp bitmap, used for in-app preview.
+  final Uint8List previewPng;
 }
 
 Future<_ProcessedImage> _processForReceiptPrinter(Uint8List raw) {
@@ -604,31 +636,55 @@ _ProcessedImage _resizeGrayscaleDither(Uint8List raw) {
     );
   }
   final gray = img.grayscale(resized);
-  final dithered = img.ditherImage(
-    gray,
-    kernel: img.DitherKernel.floydSteinberg,
-    serpentine: true,
-  );
 
-  final w = dithered.width;
-  final h = dithered.height;
+  final w = gray.width;
+  final h = gray.height;
   final bytesPerRow = (w + 7) ~/ 8;
   final out = Uint8List(bytesPerRow * h);
+
+  // Floyd-Steinberg error diffusion directly to 1bpp output.
+  // Two row buffers swapped after each line; serpentine scan reduces
+  // directional banding.
+  var errCurr = List<double>.filled(w, 0.0);
+  var errNext = List<double>.filled(w, 0.0);
+
   for (var y = 0; y < h; y++) {
     final rowOffset = y * bytesPerRow;
-    for (var x = 0; x < w; x++) {
-      // After Floyd-Steinberg with the default 2-color palette, pixels are
-      // effectively 0 (black) or 255 (white). Threshold at 128 to be safe.
-      if (dithered.getPixel(x, y).r < 128) {
+    final ltr = y.isEven;
+
+    for (var i = 0; i < w; i++) {
+      final x = ltr ? i : w - 1 - i;
+      final oldVal = (gray.getPixel(x, y).r as num).toDouble() + errCurr[x];
+      final newVal = oldVal < 128.0 ? 0.0 : 255.0;
+      final error = oldVal - newVal;
+
+      if (newVal == 0.0) {
         out[rowOffset + (x >> 3)] |= 0x80 >> (x & 7);
       }
+
+      // Distribute error to neighbours (kernel is mirrored for RTL rows).
+      final xFwd = ltr ? x + 1 : x - 1;
+      final xBwd = ltr ? x - 1 : x + 1;
+      if (xFwd >= 0 && xFwd < w) errCurr[xFwd] += error * (7.0 / 16.0);
+      if (y + 1 < h) {
+        if (xBwd >= 0 && xBwd < w) errNext[xBwd] += error * (3.0 / 16.0);
+        errNext[x]                               += error * (5.0 / 16.0);
+        if (xFwd >= 0 && xFwd < w) errNext[xFwd] += error * (1.0 / 16.0);
+      }
     }
+
+    final tmp = errCurr;
+    errCurr = errNext;
+    errNext = tmp;
+    errNext.fillRange(0, w, 0.0);
   }
+
   return _ProcessedImage(
     bitmap: out,
     bitmapBase64: base64Encode(out),
     width: w,
     height: h,
+    previewPng: Uint8List.fromList(img.encodePng(gray)),
   );
 }
 
