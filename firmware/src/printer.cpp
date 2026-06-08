@@ -14,6 +14,9 @@
 #include "pins.h"
 #include "secrets.h"
 
+// Statically allocated buffer for HTTP responses
+static char buf[PRINTIMATE_MAX_RESPONSE_BYTES];
+
 // =============================================================================
 // formatTimestampPT
 // =============================================================================
@@ -55,6 +58,16 @@ static String formatTimestampPT(const String &iso) {
 static HardwareSerial g_printerSerial(PRINTER_UART_NUM);
 static Adafruit_Thermal g_thermalPrinter(&g_printerSerial);
 
+// Full-width solid divider line, 3 pixels tall.
+static constexpr int kDividerHeightPx = 3;
+static const uint8_t kDivider[] = {
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+};
+static_assert(sizeof(kDivider) == kDividerHeightPx * (PRINTIMATE_PRINTER_WIDTH_PX / 8),
+              "kDivider byte count does not match printer width * height");
+
 // =============================================================================
 // printer_begin
 // =============================================================================
@@ -62,38 +75,111 @@ void printer_begin(Printer &p) {
     g_printerSerial.begin(9600, SERIAL_8N1, PIN_PRINTER_RX, PIN_PRINTER_TX);
     g_thermalPrinter.begin();
     p.initialized = true;
+    p.consecutiveErrors = 0;
 
     PRINTIMATE_LOG_I("Printer: UART2 ready (TX=%d RX=%d)", PIN_PRINTER_TX, PIN_PRINTER_RX);
+}
 
-    // Startup banner — gives the user a physical confirmation the device is online.
-    g_thermalPrinter.println("=== Printimate Online ===");
-    g_thermalPrinter.print("MAC: ");
-    g_thermalPrinter.println(WiFi.macAddress());
-    g_thermalPrinter.print("IP:  ");
-    g_thermalPrinter.println(WiFi.localIP());
-    g_thermalPrinter.feed(2);
+// =============================================================================
+// base64_decode_inplace
+// =============================================================================
+// Decodes base64 in s[], writing decoded bytes back from the start (safe
+// because output is always ≤ 75% of input length). Returns byte count.
+static int base64_decode_inplace(char *s) {
+    auto decode_char = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+
+    uint8_t *out = (uint8_t *)s;
+    int j = 0;
+
+    for (int i = 0; s[i]; i += 4) {
+        // Read all four encoded bytes before writing anything (in-place safety).
+        char r0 = s[i], r1 = s[i+1], r2 = s[i+2], r3 = s[i+3];
+
+        int v0 = decode_char(r0), v1 = decode_char(r1);
+        if (v0 < 0 || v1 < 0) break;
+        out[j++] = (v0 << 2) | (v1 >> 4);
+
+        if (r2 == '=' || r2 == '\0') break;
+        int v2 = decode_char(r2);
+        if (v2 < 0) break;
+        out[j++] = (v1 << 4) | (v2 >> 2);
+
+        if (r3 == '=' || r3 == '\0') break;
+        int v3 = decode_char(r3);
+        if (v3 < 0) break;
+        out[j++] = (v2 << 6) | v3;
+    }
+
+    return j;
 }
 
 // =============================================================================
 // printer_printMessage
 // =============================================================================
 void printer_printMessage(Printer &p, const Message &msg) {
-    g_thermalPrinter.println("================================");
+    g_thermalPrinter.printBitmap(PRINTIMATE_PRINTER_WIDTH_PX, kDividerHeightPx, kDivider, false);
+    g_thermalPrinter.println();
     g_thermalPrinter.print("From: ");
     g_thermalPrinter.println(msg.authorName);
     g_thermalPrinter.print("Sent: ");
     g_thermalPrinter.println(formatTimestampPT(msg.sentTimestamp));
-    g_thermalPrinter.println();
-    g_thermalPrinter.println(msg.messageText);
 
-    if (msg.imageCount > 0) {
-        // TODO: fetch each URL via HTTPS and print as a 1-bit dithered bitmap.
-        // Max size: PRINTIMATE_MAX_IMAGE_BYTES. See Felipe's image spec.
-        PRINTIMATE_LOG_W("Printer: %d image(s) — image printing not yet implemented",
-                         msg.imageCount);
+    // Message text is now contained within images
+    // g_thermalPrinter.println();
+    // g_thermalPrinter.println(msg.messageText);
+
+    // Print all images
+    for (int i = 0; i < msg.imageCount; i++) {
+        const Image &img = msg.images[i];
+        if (!img.bitmap || img.width <= 0 || img.height <= 0) continue;
+        int bytes = base64_decode_inplace(img.bitmap);
+        PRINTIMATE_LOG_I("Printer: image %d/%d: %dx%d px, %d bytes decoded",
+                         i + 1, msg.imageCount, img.width, img.height, bytes);
+        g_thermalPrinter.printBitmap(img.width, img.height,
+                                     (const uint8_t *)img.bitmap, false);
     }
 
     g_thermalPrinter.feed(3);
+}
+
+// =============================================================================
+// http_receive_into
+// =============================================================================
+// Reads the HTTP response body into out[0..outLen-1], null-terminates it, and
+// returns the byte count. Returns -1 if the stream is unavailable.
+static int http_receive_into(HTTPClient &http, char *out, size_t outLen) {
+    WiFiClient *stream = http.getStreamPtr();
+    if (!stream) return -1;
+
+    int contentLen = http.getSize();
+    size_t received = 0;
+    const size_t limit = outLen - 1;
+    const unsigned long deadline = millis() + 5000;
+
+    while (received < limit && millis() < deadline) {
+        int avail = stream->available();
+        if (avail > 0) {
+            size_t toRead = min((size_t)avail, limit - received);
+            received += stream->readBytes(out + received, toRead);
+        } else if (contentLen >= 0 && (int)received >= contentLen) {
+            break;
+        } else {
+            delay(1);
+        }
+    }
+    if (received >= limit) {
+        PRINTIMATE_LOG_E("Printer: response exceeded buffer (%d bytes), truncated", (int)outLen);
+        return -1;
+    }
+    out[received] = '\0';
+    return (int)received;
 }
 
 // =============================================================================
@@ -140,13 +226,19 @@ bool printer_fetchAndPrintMessages(Printer &p) {
     }
 
     // Read the full response body before closing the connection.
-    String body = http.getString();
+    int bodyLen = http_receive_into(http, (char *)buf, sizeof(buf));
     http.end();
+    PRINTIMATE_LOG_I("Printer: received response (%d bytes)", bodyLen);
+    if (bodyLen < 0) {
+        PRINTIMATE_LOG_E("Printer: failed to read response body");
+        p.consecutiveErrors++;
+        return false;
+    }
 
     // Parse the JSON array. ArduinoJson v7 allocates from the heap; the doc
     // is freed when it goes out of scope at the end of this function.
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, body);
+    DeserializationError err = deserializeJson(doc, buf, bodyLen);
     if (err) {
         PRINTIMATE_LOG_E("Printer: JSON parse failed: %s", err.c_str());
         p.consecutiveErrors++;
@@ -164,12 +256,12 @@ bool printer_fetchAndPrintMessages(Printer &p) {
         msg.messageText    = obj["messageText"]    | "";
         msg.printed        = obj["printed"]        | false;
 
-        // Collect image URLs up to the per-message cap; extras are silently
-        // dropped. Actual fetching is deferred to printer_printMessage.
-        for (const char *imgUrl : obj["images"].as<JsonArray>()) {
-            if (msg.imageCount < PRINTIMATE_MAX_IMAGES_PER_MESSAGE) {
-                msg.images[msg.imageCount++] = imgUrl;
-            }
+        for (JsonObject imgObj : obj["images"].as<JsonArray>()) {
+            if (msg.imageCount >= PRINTIMATE_MAX_IMAGES_PER_MESSAGE) break;
+            Image &img  = msg.images[msg.imageCount++];
+            img.width   = imgObj["width"]  | 0;
+            img.height  = imgObj["height"] | 0;
+            img.bitmap  = (char *)imgObj["bitmap"].as<const char *>();
         }
 
         if (!msg.printed) {
