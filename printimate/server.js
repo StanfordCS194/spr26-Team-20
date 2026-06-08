@@ -10,19 +10,6 @@ import { getFirestore } from "firebase-admin/firestore";
 import { Collections } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-<<<<<<< HEAD:printimate/server.js
-function getServiceAccount() {
-    const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
-    if (b64) {
-        const json = Buffer.from(b64, "base64").toString("utf8");
-        console.log("Decoded service account JSON:", json);
-        return JSON.parse(json);
-    }
-    // Optional local fallback for dev only
-    throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
-}
-const serviceAccount = getServiceAccount();
-=======
 const envDir = join(__dirname, "env");
 const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
 const envFile = envFiles[0];
@@ -31,18 +18,13 @@ if (!envFile) {
 }
 const serviceAccountPath = join(envDir, envFile);
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
->>>>>>> heroku/main:server.js
 const adminApp = initializeApp({
     credential: cert(serviceAccount),
 });
 const db = getFirestore(adminApp);
 const app = express();
-<<<<<<< HEAD:printimate/server.js
-const port = process.env.PORT;
-=======
 const port = process.env.PORT || 3000;
 app.use(cors());
->>>>>>> heroku/main:server.js
 app.use(express.json());
 var messages = {};
 app.post("/send", (req, res) => {
@@ -103,24 +85,11 @@ app.get("/messages", async (req, res) => {
                 printed: data.printed,
             };
         });
-<<<<<<< HEAD:printimate/server.js
-        //If no messages are found then we want to return a 404 error.
-        if (messages.length === 0) {
-            res.status(200).send("Message not found");
-            return;
-        }
-        //We have all the messages this printer has recieved, we want to filter out the messages that have already been printed and return the rest.
-        var outputMessage = [];
-        for (const message of messages) {
-            if (message.printed) {
-                continue;
-=======
         // Mark returned messages as printed in Firestore so they aren't re-sent.
         if (unprintedDocs.length > 0) {
             const batch = db.batch();
             for (const doc of unprintedDocs) {
                 batch.update(doc.ref, { printed: true });
->>>>>>> heroku/main:server.js
             }
             await batch.commit();
         }
