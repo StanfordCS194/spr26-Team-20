@@ -197,36 +197,34 @@ app.get("/status", async (req, res) => {
 });
 
 app.post("/setup", async (req, res) => {
-  const pid = req.query.pid as string;
-  const uid = req.body.uid as string;
+  let pid = req.query.pid as string;
+  let uid = req.body.uid as string;
 
-  if (!pid || !uid) {
-    res.status(400).send("Missing required fields: pid, uid");
-    return;
-  }
-
-  try {
-    // First we need to check if the printer is already owned.
-    const printerDoc = await db.collection(Collections.printers).doc(pid).get();
-
-    if (!printerDoc.exists) {
-      res.status(404).send("Printer not found");
-      return;
-    }
-
-    const printerData = printerDoc.data() as PrinterDocument | undefined;
-    const owner_uid = printerData?.[PrinterFields.ownerUid] ?? null;
+  const printerDoc = await db.collection(Collections.printers).doc(pid).get();
+  
+  //First we need to check if the printer is already owned.
+  if (printerDoc.exists) {
+    const printerData = printerDoc.data();
+    const owner_uid = printerData?.ownerUid as string | null ?? null;
 
     if (owner_uid != null) {
       res.status(403).send("Printer is already owned by another user");
       return;
     }
-
-    //Next we want to assign this pid to to the uid
-  } catch (error) {
-    console.error("Failed to set up printer", error);
-    res.status(500).send("Failed to set up printer");
   }
+  await db.collection(Collections.printers).doc(pid).set({
+    ownerUid: uid,
+    onlineStatus: false,
+  }, { merge: true });
+  const userDoc = await db.collection(Collections.users).doc(uid).get();
+  const userData = userDoc.data();
+  //Next we want to assign this pid to to the uid
+  const ownedPids: string[] = userData?.ownedPids ?? [];
+  ownedPids.push(pid);
+  await db.collection(Collections.users).doc(uid).update({
+    ownedPids: ownedPids,
+  });
+  res.status(200).send("Printer setup complete");
 });
 
 /*
