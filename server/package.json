@@ -16,6 +16,6 @@
     "dev": "tsx watch server.ts",
     "build": "tsc",
     "heroku-postbuild": "npm run build",
-    "start": "npx tsx server.ts"
+    "start": "node dist/server.js"
   }
 }
