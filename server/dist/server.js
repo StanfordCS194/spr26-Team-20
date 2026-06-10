@@ -35,6 +35,7 @@ app.post("/send", (req, res) => {
     const pid = req.query.pid;
     const body = req.body;
     console.log(`Received request to send message to pid ${pid} with body:`, body);
+    // Niklas's modification
     if (!pid || !body.authorUid || body.messageText == null) {
         res
             .status(400)
