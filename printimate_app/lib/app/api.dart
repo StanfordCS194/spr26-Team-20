@@ -24,6 +24,50 @@ Future<List<String>> fetchPrintersList(String uid) async {
   return printerIds;
 }
 
+/// A printer the user can see, tagged with whether they own it (vs. were
+/// granted access to a friend's printer).
+class PrinterEntry {
+  final String pid;
+  final bool owned;
+  const PrinterEntry({required this.pid, required this.owned});
+}
+
+/// Like [fetchPrintersList] but preserves whether each printer is owned or
+/// friended, so the UI can offer a "remove" action on friended printers only.
+Future<List<PrinterEntry>> fetchPrintersDetailed(String uid) async {
+  final doc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .get();
+
+  if (!doc.exists) {
+    throw Exception('User not found');
+  }
+
+  final data = doc.data();
+  final ownedPids = List<String>.from(data?['ownedPids'] ?? []);
+  final friendedPids = List<String>.from(data?['friendedPids'] ?? []);
+
+  final entries = <PrinterEntry>[];
+  final seen = <String>{};
+  for (final pid in ownedPids) {
+    if (seen.add(pid)) entries.add(PrinterEntry(pid: pid, owned: true));
+  }
+  for (final pid in friendedPids) {
+    if (seen.add(pid)) entries.add(PrinterEntry(pid: pid, owned: false));
+  }
+  return entries;
+}
+
+/// Removes a friend's printer from the current user's accessible list by
+/// dropping it from their `friendedPids`. The user owns this document, so this
+/// is an atomic, self-authorized write (no server round-trip needed).
+Future<void> removeFriendedPrinter(String uid, String pid) async {
+  await FirebaseFirestore.instance.collection('users').doc(uid).update({
+    'friendedPids': FieldValue.arrayRemove([pid]),
+  });
+}
+
 // Check if a printer exists
 Future<bool> fetchPrinterExists(String pid) async {
   final doc = await FirebaseFirestore.instance

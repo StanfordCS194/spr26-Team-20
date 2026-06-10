@@ -52,7 +52,11 @@ class AuthController {
 
   Future<User> signInWithGoogle() async {
     if (kIsWeb) {
-      final provider = GoogleAuthProvider();
+      final provider = GoogleAuthProvider()
+        // Force the account chooser so the web SDK issues a fresh credential
+        // each time; reusing a cached one can trigger "Duplicate credential
+        // received" (a nonce-reuse quirk in firebase-js) on repeat logins.
+        ..setCustomParameters({'prompt': 'select_account'});
       final cred = await _auth.signInWithPopup(provider);
       await _profiles.upsertFromAuth(cred.user!);
       return cred.user!;

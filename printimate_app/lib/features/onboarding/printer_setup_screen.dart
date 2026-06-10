@@ -32,7 +32,7 @@ class _PrinterSetupScreenState extends ConsumerState<PrinterSetupScreen> {
     if (id.isEmpty) return;
     ref.read(onboardingProvider.notifier).setPrinterId(id);
     // TODO: actually attempt printer pairing/MQTT registration here.
-    context.go('/onboarding/friends');
+    context.go('/onboarding/add_friends_screen');
   }
 
   @override
@@ -71,7 +71,7 @@ class _PrinterSetupScreenState extends ConsumerState<PrinterSetupScreen> {
           const Spacer(),
           OutlinedButton(
             onPressed: canContinue ? _connect : null,
-            child: const Text('📡  CONNECT PRINTER'),
+            child: const Text('CONNECT PRINTER  →'),
           ),
           const SizedBox(height: 8),
           OutlinedButton(

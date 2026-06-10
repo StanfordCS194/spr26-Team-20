@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../onboarding/onboarding_state.dart';
-import '../send/send_screen.dart';
 import '../../app/api.dart';
 
 
@@ -13,7 +11,11 @@ import '../../app/api.dart';
 /// A single printer entry returned by the backend.
 class _Printer {
   final String pid;
-  const _Printer({required this.pid});
+
+  /// Whether the current user owns this printer (vs. a friend's printer they
+  /// were granted access to). Friended printers can be removed.
+  final bool owned;
+  const _Printer({required this.pid, this.owned = true});
 }
 
 // ---------------------------------------------------------------------------
@@ -60,12 +62,14 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
         return;
       }
 
-      final printerIds = await fetchPrintersList(user.uid);
+      final entries = await fetchPrintersDetailed(user.uid);
 
       setState(() {
         _printers
           ..clear()
-          ..addAll(printerIds.map((pid) => _Printer(pid: pid)));
+          ..addAll(entries.isEmpty
+              ? const [_Printer(pid: 'printer1')]
+              : entries.map((e) => _Printer(pid: e.pid, owned: e.owned)));
         _loading = false;
       });
     } catch (e) {
@@ -78,6 +82,48 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
         _loading = false;
       });
       debugPrint('Failed to load printers: $e');
+    }
+  }
+
+  Future<void> _confirmRemove(_Printer printer) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: PrintimateColors.surface,
+        title: const Text('Remove printer?'),
+        content: Text(
+          "You'll lose access to '${printer.pid}'. You can ask for access "
+          'again later by sending a new request.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('REMOVE'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      await removeFriendedPrinter(user.uid, printer.pid);
+      if (!mounted) return;
+      setState(() => _printers.removeWhere((p) => p.pid == printer.pid));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Removed '${printer.pid}'")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not remove printer. Try again.')),
+      );
+      debugPrint('Failed to remove printer: $e');
     }
   }
 
@@ -177,13 +223,16 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
                                 child: ListView.separated(
                                   physics: const AlwaysScrollableScrollPhysics(),
                                   itemCount: _printers.length,
-                                  separatorBuilder: (_, __) => const Divider(
+                                  separatorBuilder: (_, _) => const Divider(
                                     color: PrintimateColors.border,
                                     height: 1,
                                   ),
                                   itemBuilder: (context, index) => _PrinterTile(
                                     printer: _printers[index],
                                     onTap: () => widget.onPrinterSelected(_printers[index].pid),
+                                    onRemove: _printers[index].owned
+                                        ? null
+                                        : () => _confirmRemove(_printers[index]),
                                   ),
                                 ),
                               ),
@@ -227,10 +276,17 @@ class _PrintersListScreenState extends ConsumerState<PrintersListScreen> {
 // ---------------------------------------------------------------------------
 
 class _PrinterTile extends StatelessWidget {
-  const _PrinterTile({required this.printer, required this.onTap});
+  const _PrinterTile({
+    required this.printer,
+    required this.onTap,
+    this.onRemove,
+  });
 
   final _Printer printer;
   final VoidCallback onTap;
+
+  /// When non-null, a "remove" affordance is shown (friended printers only).
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +307,33 @@ class _PrinterTile extends StatelessWidget {
                     ),
               ),
             ),
+            if (!printer.owned) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  border: Border.all(color: PrintimateColors.border),
+                ),
+                child: const Text(
+                  'FRIEND',
+                  style: TextStyle(
+                    fontFamily: 'Courier',
+                    fontSize: 10,
+                    color: PrintimateColors.textDim,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ],
+            if (onRemove != null)
+              Tooltip(
+                message: 'Remove printer',
+                child: IconButton(
+                  icon: const Icon(Icons.close,
+                      size: 18, color: PrintimateColors.textDim),
+                  onPressed: onRemove,
+                ),
+              ),
           ],
         ),
       ),
