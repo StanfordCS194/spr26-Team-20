@@ -11,6 +11,7 @@ import '../../app/theme.dart';
 import '../auth/user_profile_repository.dart';
 import '../onboarding/onboarding_state.dart';
 import '../../app/config.dart';
+import '../../app/api.dart';
 
 
 class FriendingScreen extends ConsumerStatefulWidget {
@@ -25,6 +26,7 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
   bool _submitting = false;
   String? _error;
   String? _successPid;
+  List<Map<String, dynamic>> _pendingRequests = [];
 
   // Previously used for contact/username flow — kept for future use
   final _selected = <String>{};
@@ -41,6 +43,7 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
   void initState() {
     super.initState();
     // _loadContacts(); // Uncomment to re-enable contact sync
+    _loadPendingRequests();
   }
 
   @override
@@ -48,6 +51,13 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
     _pidCtl.dispose();
     _usernameCtl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPendingRequests() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final results = await fetchSentFriendRequests(uid);
+    setState(() => _pendingRequests = results);
   }
 
   // This function is currently unused
@@ -116,19 +126,11 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
       _error = null;
       _successPid = null;
     });
+    
 
     try {
       // Check if printer exists via server
-      final checkResponse = await http.get(
-        Uri.parse('$Config.serverUrl/printer-exists?pid=$pid'),
-      ).timeout(const Duration(seconds: 5));
-
-      if (checkResponse.statusCode != 200) {
-        throw Exception(checkResponse.body);
-      }
-
-      final checkData = jsonDecode(checkResponse.body) as Map<String, dynamic>;
-      if (checkData['exists'] != true) {
+      if (!await fetchPrinterExists(pid)) {
         setState(() {
           _error = 'Printer not found. Check the ID and try again.';
           _submitting = false;
@@ -138,7 +140,7 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
 
       // Send permission request
       final response = await http.post(
-        Uri.parse('$Config.serverUrl/send-permission-request?pid=$pid'),
+        Uri.parse('${Config.serverBaseUrl}/send-permission-request?pid=$pid'),
         headers: const {'Content-Type': 'application/json'},
         body: jsonEncode({'fromUid': uid}),
       ).timeout(const Duration(seconds: 5));
@@ -152,9 +154,14 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
         _submitting = false;
         _pidCtl.clear();
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Friend request sent!')),
+      );
     } catch (e) {
       setState(() {
-        _error = 'Failed to send request. Check the printer ID and try again.';
+        print('ERROR: $e');
+        print('ERROR TYPE: ${e.runtimeType}');
+        _error = e.toString();;
         _submitting = false;
       });
     }
@@ -212,7 +219,6 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
                   Expanded(
                     child: TextField(
                       controller: _pidCtl,
-                      textCapitalization: TextCapitalization.characters,
                       onChanged: (_) => setState(() {
                         _error = null;
                         _successPid = null;
@@ -259,16 +265,44 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
                   ),
                 ),
               ],
-              const Spacer(),
-              OutlinedButton(
-                onPressed: _submitting ? null : _finish,
-                child: const Text('CONTINUE  →'),
+              
+          const Spacer(),
+            if (_pendingRequests.isNotEmpty) ...[
+              const Divider(color: PrintimateColors.border),
+              ExpansionTile(
+                title: Text(
+                  'PENDING REQUESTS (${_pendingRequests.length})',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                iconColor: PrintimateColors.text,
+                collapsedIconColor: PrintimateColors.textDim,
+                children: _pendingRequests.map((req) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.hourglass_empty, size: 14, color: PrintimateColors.textDim),
+                      const SizedBox(width: 8),
+                      Text(
+                        req['pid'] as String,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: PrintimateColors.textDim,
+                        ),
+                      ),
+                    ],
+                  ),
+                )).toList(),
               ),
               const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _submitting ? null : _finish,
-                child: const Text('SKIP FOR NOW'),
-              ),
+            ],
+            OutlinedButton(
+              onPressed: _submitting ? null : _finish,
+              child: const Text('CONTINUE  →'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: _submitting ? null : _finish,
+              child: const Text('SKIP FOR NOW'),
+            ),
             ],
           ),
         ),

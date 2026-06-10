@@ -64,6 +64,9 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
 
     if (res.statusCode == 200) {
       setState(() => _requests.removeAt(index));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Request accepted!')),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to accept request')),
@@ -88,6 +91,9 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
 
     if (res.statusCode == 200) {
       setState(() => _requests.removeAt(index));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Request rejected!')),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to decline request')),
@@ -104,14 +110,17 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
     if (currentUser == null) return;
 
     final results = await fetchFriendRequests(currentUser.uid);
-    
-    final List<_FriendRequest> loaded = results.map((entry) {
-    return _FriendRequest(
-        username: entry['requesterUid'] as String,
-        uid: entry['requesterUid'] as String,
+
+    final List<_FriendRequest> loaded = [];
+    for (final entry in results) {
+      final requesterUid = entry['requesterUid'] as String;
+      final username = await fetchUsername(requesterUid);
+      loaded.add(_FriendRequest(
+        username: username,
+        uid: requesterUid,
         printer_name: entry['pid'] as String,
-      );
-    }).toList();
+      ));
+    }
 
     setState(() {
       _requests.clear();
@@ -235,11 +244,15 @@ class _RequestTile extends StatelessWidget {
               size: 20, color: PrintimateColors.textDim),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              request.username,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w400,
-                  ),
+            child: RichText(
+              text: TextSpan(
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w400),
+                children: [
+                  TextSpan(text: request.username, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const TextSpan(text: ' is requesting access to your printer '),
+                  TextSpan(text: request.printer_name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
             ),
           ),
           Row(

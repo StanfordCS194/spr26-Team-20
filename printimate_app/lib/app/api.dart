@@ -66,3 +66,35 @@ Future<List<Map<String, dynamic>>> fetchFriendRequests(String uid) async {
 
   return results;
 }
+// Future<bool> friendRequestExists(String uid, String pid) async {
+//   final doc = await FirebaseFirestore.instance
+//       .collection('permissionRequests')
+//       .doc(pid)
+//       .get();
+//   if (!doc.exists) return false;
+//   final fromUids = List<String>.from(doc.data()?['fromUid'] ?? []);
+//   return fromUids.contains(uid);
+// }
+
+Future<String> fetchUsername(String uid) async {
+  final doc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .get();
+  if (!doc.exists) return uid; // fallback to uid if not found
+  return doc.data()?['username'] as String? ?? uid;
+}
+
+Future<List<Map<String, dynamic>>> fetchSentFriendRequests(String uid) async {
+  final snapshot = await FirebaseFirestore.instance
+      .collection('permissionRequests')
+      .get();
+  final results = <Map<String, dynamic>>[];
+  for (final doc in snapshot.docs) {
+    final fromUids = List<String>.from(doc.data()['fromUid'] ?? []);
+    if (fromUids.contains(uid)) {
+      results.add({'pid': doc.id});
+    }
+  }
+  return results;
+}
