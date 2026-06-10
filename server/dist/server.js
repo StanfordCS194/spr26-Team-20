@@ -174,6 +174,10 @@ app.post("/send-permission-request", async (req, res) => {
         var currentData = currentRequests.data();
         if (currentData) {
             requestList = currentData.fromUid;
+            if (requestList.includes(uid)) {
+                res.status(409).send("You already sent a request for this printer.");
+                return;
+            }
             requestList.push(uid);
         }
     }
