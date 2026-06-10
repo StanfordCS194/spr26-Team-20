@@ -27,22 +27,33 @@ bool get _canProvision {
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authStateProvider);
-  final prefs = ref.watch(appPreferencesProvider);
-  final profile = auth.value == null
-      ? null
-      : ref.watch(userProfileDocProvider(auth.value!.uid));
-  final hasPrinter = ref.watch(
-    onboardingProvider.select((s) => s.printerId.trim().isNotEmpty),
-  );
-  final selectedPrinterName = ref.watch(
-    onboardingProvider.select((s) => s.printerId.trim()),
-  );
+  // Only recreate the GoRouter on sign-in/sign-out. Profile-doc and onboarding
+  // changes instead bump [refresh], which re-runs redirects on the SAME router
+  // instance — recreating the router here would reset navigation and unmount
+  // the active screen mid-interaction (e.g. while saving a username).
+  final user = ref.watch(authStateProvider).value;
+
+  final refresh = ValueNotifier<int>(0);
+  ref.onDispose(refresh.dispose);
+  if (user != null) {
+    ref.listen(userProfileDocProvider(user.uid), (_, _) => refresh.value++);
+  }
+  ref.listen(onboardingProvider, (_, _) => refresh.value++);
 
   return GoRouter(
     initialLocation: '/splash',
+    refreshListenable: refresh,
     redirect: (context, state) {
       final loc = state.matchedLocation;
+
+      // Read current state lazily so redirects always see the latest values.
+      final auth = ref.read(authStateProvider);
+      final prefs = ref.read(appPreferencesProvider);
+      final profile = auth.value == null
+          ? null
+          : ref.read(userProfileDocProvider(auth.value!.uid));
+      final hasPrinter =
+          ref.read(onboardingProvider).printerId.trim().isNotEmpty;
 
       // Wait for Firebase Auth to hydrate before deciding anything.
       if (auth.isLoading) return loc == '/splash' ? null : '/splash';
@@ -109,9 +120,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/friend_requests', builder: (_, __) => const FriendRequestsScreen()),
       GoRoute(
         path: '/send',
-        builder: (_, __) => SendScreen(
-          printerName: selectedPrinterName.isEmpty ? 'printer1' : selectedPrinterName,
-        ),
+        builder: (_, _) {
+          final pid = ref.read(onboardingProvider).printerId.trim();
+          return SendScreen(printerName: pid.isEmpty ? 'printer1' : pid);
+        },
       ),
     ],
   );

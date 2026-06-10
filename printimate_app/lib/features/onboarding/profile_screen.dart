@@ -57,18 +57,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     setState(() { _checkingUsername = true; _usernameError = null; });
 
+    // Capture provider objects up-front so we never touch `ref` after an await.
     final repo = ref.read(userProfileRepositoryProvider);
+    final authController = ref.read(authControllerProvider);
+    final onboarding = ref.read(onboardingProvider.notifier);
+    final uid = authController.currentUser!.uid;
+
     final taken = await repo.isUsernameTaken(username);
+    if (!mounted) return;
     if (taken) {
       setState(() { _usernameError = 'That username is already taken.'; _checkingUsername = false; });
       return;
     }
-    
+
     setState(() => _checkingUsername = false);
-    ref.read(onboardingProvider.notifier).setName(name);
-    await ref.read(authControllerProvider).updateDisplayName(name);
-    await repo.setUsername(ref.read(authControllerProvider).currentUser!.uid, username);
-    if (mounted) context.go('/onboarding/printer');
+    onboarding.setName(name);
+    await authController.updateDisplayName(name);
+    await repo.setUsername(uid, username);
+    // Demo: printer defaults to printer1 and provisioning is skipped, so go
+    // straight to home rather than the printer-setup / friends onboarding steps.
+    if (mounted) context.go('/home');
   }
 
   @override

@@ -1,22 +1,24 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../friends/incoming_requests.dart';
 import '../history/history_screen.dart';
 import '../profile/profile_screen.dart';
 import '../send/send_screen.dart';
 import '../send/printers_list_screen.dart';
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, this.initialIndex = 1});
   final int initialIndex;
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> {
   static const _tabs = ['HISTORY', 'SEND', 'PROFILE'];
 
   late final PageController _controller =
@@ -40,8 +42,52 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _showRequestBanner(int count) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearMaterialBanners();
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        backgroundColor: PrintimateColors.surface,
+        leading: const Icon(Icons.favorite, color: PrintimateColors.text),
+        content: Text(
+          count == 1
+              ? 'New friend request for your printer!'
+              : 'You have $count pending friend requests.',
+          style: const TextStyle(color: PrintimateColors.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              messenger.hideCurrentMaterialBanner();
+              context.push('/friend_requests');
+            },
+            child: const Text('VIEW'),
+          ),
+          TextButton(
+            onPressed: messenger.hideCurrentMaterialBanner,
+            child: const Text('DISMISS'),
+          ),
+        ],
+      ),
+    );
+    // Auto-dismiss so the banner doesn't linger over the demo.
+    Future.delayed(const Duration(seconds: 6), () {
+      if (mounted) messenger.hideCurrentMaterialBanner();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Drop a banner whenever the number of pending requests goes up.
+    ref.listen<AsyncValue<List<IncomingRequest>>>(incomingRequestsProvider,
+        (prev, next) {
+      final prevCount = prev?.asData?.value.length ?? 0;
+      final nextCount = next.asData?.value.length ?? 0;
+      if (nextCount > prevCount) _showRequestBanner(nextCount);
+    });
+    final requestCount =
+        ref.watch(incomingRequestsProvider).asData?.value.length ?? 0;
+
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -75,7 +121,14 @@ class _HomeShellState extends State<HomeShell> {
                   Tooltip(
                     message: 'Friend Requests',
                     child: IconButton(
-                      icon: const Icon(Icons.favorite_border, color: PrintimateColors.text),
+                      icon: requestCount > 0
+                          ? Badge.count(
+                              count: requestCount,
+                              child: const Icon(Icons.favorite,
+                                  color: PrintimateColors.text),
+                            )
+                          : const Icon(Icons.favorite_border,
+                              color: PrintimateColors.text),
                       onPressed: () => context.push('/friend_requests'),
                     ),
                   ),

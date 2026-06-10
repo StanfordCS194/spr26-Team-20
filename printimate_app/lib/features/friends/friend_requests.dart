@@ -1,134 +1,113 @@
-// friend_requests.dart - Screen for managing incoming friend requests
+// friend_requests.dart - Screen for managing incoming friend requests.
+//
+// The list is driven by [incomingRequestsProvider], a realtime Firestore
+// stream, so requests appear and disappear live (including when accepted or
+// rejected from another device) without any manual refresh.
 
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-
-import '../../app/theme.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../app/config.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+
 import '../../app/api.dart';
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
+import '../../app/config.dart';
+import '../../app/theme.dart';
+import 'incoming_requests.dart';
 
 class _FriendRequest {
   final String username;
   final String uid;
-  final String printer_name;
+  final String printerName;
   const _FriendRequest({
     required this.username,
     required this.uid,
-    required this.printer_name,
+    required this.printerName,
   });
 }
-
-// If don't have friends, activate this mock data to show what the screen looks like 
-//const _friendRequests = [
-//   _FriendRequest(username: 'Sarah Chen', printer_name: 'john-printer1'),
-//   _FriendRequest(username: 'Mike Thompson', printer_name: 'john-printer1'),
-//   _FriendRequest(username: 'Emily Rodriguez', printer_name: 'john-printer2'),
-//   _FriendRequest(username: 'Jordan Lee', printer_name: 'john-printer3'),
-//   _FriendRequest(username: 'Alex Kim', printer_name: 'john-printer3'),
-// ];
 
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
-class FriendRequestsScreen extends StatefulWidget {
+class FriendRequestsScreen extends ConsumerStatefulWidget {
   const FriendRequestsScreen({super.key});
 
   @override
-  State<FriendRequestsScreen> createState() => _FriendRequestsScreenState();
+  ConsumerState<FriendRequestsScreen> createState() =>
+      _FriendRequestsScreenState();
 }
 
-class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
-  final List<_FriendRequest> _requests = [];
+class _FriendRequestsScreenState extends ConsumerState<FriendRequestsScreen> {
+  /// Cache of requesterUid -> display username, so we resolve each name once.
+  final Map<String, String> _usernameCache = {};
 
-  Future<void> _accept(int index) async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+  /// In-flight accept/decline keys ("pid|uid") to avoid double-taps.
+  final Set<String> _processing = {};
 
-    final request = _requests[index];
-    final res = await http.post(
-      Uri.parse('${Config.serverBaseUrl}/accept-permission-request'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'ownersUid': currentUser.uid,
-        'pid': request.printer_name,
-        'requestersUid': request.uid,
-      }),
-    );
+  String _key(IncomingRequest r) => '${r.pid}|${r.requesterUid}';
 
-    if (res.statusCode == 200) {
-      setState(() => _requests.removeAt(index));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request accepted!')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to accept request')),
-      );
+  /// Lazily resolve any usernames we haven't seen yet.
+  void _ensureUsernames(List<IncomingRequest> requests) {
+    for (final r in requests) {
+      if (_usernameCache.containsKey(r.requesterUid)) continue;
+      _usernameCache[r.requesterUid] = ''; // mark in-flight to avoid refetch
+      fetchUsername(r.requesterUid).then((name) {
+        if (!mounted) return;
+        setState(() => _usernameCache[r.requesterUid] = name);
+      });
     }
   }
 
-  Future<void> _decline(int index) async {
+  Future<void> _respond(IncomingRequest request, {required bool accept}) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    final request = _requests[index];
-    final res = await http.post(
-      Uri.parse('${Config.serverBaseUrl}/reject-permission-request'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'ownersUid': currentUser.uid,
-        'pid': request.printer_name,
-        'requestersUid': request.uid,
-      }),
-    );
+    final key = _key(request);
+    if (_processing.contains(key)) return;
+    setState(() => _processing.add(key));
 
-    if (res.statusCode == 200) {
-      setState(() => _requests.removeAt(index));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request rejected!')),
+    final endpoint =
+        accept ? 'accept-permission-request' : 'reject-permission-request';
+    try {
+      final res = await http.post(
+        Uri.parse('${Config.serverBaseUrl}/$endpoint'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'ownersUid': currentUser.uid,
+          'pid': request.pid,
+          'requestersUid': request.requesterUid,
+        }),
       );
-    } else {
+
+      if (!mounted) return;
+      final ok = res.statusCode == 200;
+      // The realtime stream removes the row on success; just surface a toast.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to decline request')),
+        SnackBar(
+          content: Text(ok
+              ? (accept ? 'Request accepted!' : 'Request rejected!')
+              : 'Failed to ${accept ? 'accept' : 'decline'} request'),
+        ),
       );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Network error. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _processing.remove(key));
     }
   }
-  @override
-  void initState() {
-    super.initState();
-    _loadFriendRequests();
-  }
-  Future<void> _loadFriendRequests() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
 
-    final results = await fetchFriendRequests(currentUser.uid);
-
-    final List<_FriendRequest> loaded = [];
-    for (final entry in results) {
-      final requesterUid = entry['requesterUid'] as String;
-      final username = await fetchUsername(requesterUid);
-      loaded.add(_FriendRequest(
-        username: username,
-        uid: requesterUid,
-        printer_name: entry['pid'] as String,
-      ));
-    }
-
-    setState(() {
-      _requests.clear();
-      _requests.addAll(loaded);
-    });
-  }
   @override
   Widget build(BuildContext context) {
+    final requestsAsync = ref.watch(incomingRequestsProvider);
+    final requests = requestsAsync.asData?.value ?? const <IncomingRequest>[];
+    _ensureUsernames(requests);
+
     return Scaffold(
       backgroundColor: PrintimateColors.background,
       body: SafeArea(
@@ -155,14 +134,14 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                   ),
-                  if (_requests.isNotEmpty)
+                  if (requests.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         border: Border.all(color: PrintimateColors.border),
                       ),
                       child: Text(
-                        '${_requests.length}',
+                        '${requests.length}',
                         style: const TextStyle(
                           fontFamily: 'Courier',
                           fontSize: 11,
@@ -199,18 +178,41 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
 
             // ── List ─────────────────────────────────────────────────────────
             Expanded(
-              child: _requests.isEmpty
-                  ? _EmptyState()
-                  : ListView.separated(
-                      itemCount: _requests.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(color: PrintimateColors.border, height: 1),
-                      itemBuilder: (context, index) => _RequestTile(
-                        request: _requests[index],
-                        onAccept: () => _accept(index),
-                        onDecline: () => _decline(index),
+              child: requestsAsync.isLoading && requests.isEmpty
+                  ? const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: PrintimateColors.text,
+                        ),
                       ),
-                    ),
+                    )
+                  : requests.isEmpty
+                      ? const _EmptyState()
+                      : ListView.separated(
+                          itemCount: requests.length,
+                          separatorBuilder: (_, _) => const Divider(
+                              color: PrintimateColors.border, height: 1),
+                          itemBuilder: (context, index) {
+                            final r = requests[index];
+                            final cached = _usernameCache[r.requesterUid];
+                            final username = (cached == null || cached.isEmpty)
+                                ? 'Someone'
+                                : cached;
+                            return _RequestTile(
+                              request: _FriendRequest(
+                                username: username,
+                                uid: r.requesterUid,
+                                printerName: r.pid,
+                              ),
+                              busy: _processing.contains(_key(r)),
+                              onAccept: () => _respond(r, accept: true),
+                              onDecline: () => _respond(r, accept: false),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
@@ -228,11 +230,13 @@ class _RequestTile extends StatelessWidget {
     required this.request,
     required this.onAccept,
     required this.onDecline,
+    this.busy = false,
   });
 
   final _FriendRequest request;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -250,44 +254,55 @@ class _RequestTile extends StatelessWidget {
                 children: [
                   TextSpan(text: request.username, style: const TextStyle(fontWeight: FontWeight.bold)),
                   const TextSpan(text: ' is requesting access to your printer '),
-                  TextSpan(text: request.printer_name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(text: request.printerName, style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(width: 16),
-              // Accept
-              Tooltip(
-                message: 'Accept',
-                child: InkWell(
-                  onTap: onAccept,
-                  borderRadius: BorderRadius.circular(4),
-                  child: const Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Icon(Icons.check,
-                        size: 18, color: PrintimateColors.text),
+          if (busy)
+            const Padding(
+              padding: EdgeInsets.all(6),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: PrintimateColors.text),
+              ),
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(width: 16),
+                // Accept
+                Tooltip(
+                  message: 'Accept',
+                  child: InkWell(
+                    onTap: onAccept,
+                    borderRadius: BorderRadius.circular(4),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(Icons.check,
+                          size: 18, color: PrintimateColors.text),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              // Decline
-              Tooltip(
-                message: 'Decline',
-                child: InkWell(
-                  onTap: onDecline,
-                  borderRadius: BorderRadius.circular(4),
-                  child: const Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Icon(Icons.close,
-                        size: 18, color: PrintimateColors.textDim),
+                const SizedBox(width: 4),
+                // Decline
+                Tooltip(
+                  message: 'Decline',
+                  child: InkWell(
+                    onTap: onDecline,
+                    borderRadius: BorderRadius.circular(4),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(Icons.close,
+                          size: 18, color: PrintimateColors.textDim),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -299,6 +314,8 @@ class _RequestTile extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
   @override
   Widget build(BuildContext context) {
     return Center(

@@ -196,7 +196,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           setState(() => _sendStatus = 'SENDING TO SERVER...');
           final user = FirebaseAuth.instance.currentUser!;
           final response = await http.post(
-            Uri.parse('$_serverUrl/send?pid=$destinationPid'),
+            Uri.parse('${Config.serverBaseUrl}/send?pid=$destinationPid'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'authorUid': user.uid,
