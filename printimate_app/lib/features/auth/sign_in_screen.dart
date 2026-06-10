@@ -1,5 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -75,9 +74,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     final ctl = ref.read(authControllerProvider);
-    final showApple = kIsWeb ||
-        Theme.of(context).platform == TargetPlatform.iOS ||
-        Theme.of(context).platform == TargetPlatform.macOS;
+    // Apple sign-in is hidden for the demo: the iOS build lacks the "Sign in
+    // with Apple" entitlement/capability and nonce handling, so it crashes.
+    // Re-enable once that's configured (see auth_controller.signInWithApple).
+    const showApple = false;
 
     return Scaffold(
       body: SafeArea(
