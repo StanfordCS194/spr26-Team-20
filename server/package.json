@@ -3,19 +3,20 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "firebase": "^12.12.1",
-    "firebase-admin": "^10.3.0"
+    "firebase-admin": "^12.0.0",
+    "gcp-metadata": "^7.0.0",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.6.0",
-    "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
   "scripts": {
     "dev": "tsx watch server.ts",
     "build": "tsc",
-    "start": "node server.js"
+    "heroku-postbuild": "npm ci",
+    "start": "node dist/server.js"
   }
 }
