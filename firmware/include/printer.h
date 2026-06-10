@@ -14,16 +14,24 @@
 #include <Arduino.h>
 #include "config.h"
 
+// ---- Image ------------------------------------------------------------------
+// A 1-bit bitmap attached to a Message. width/height are in pixels.
+// bitmap points into the shared receive buffer and is decoded from base64
+// in-place before printing (clobbering the encoded text).
+struct Image {
+    int   width  = 0;
+    int   height = 0;
+    char *bitmap = nullptr;
+};
+
 // ---- Message ----------------------------------------------------------------
-// Mirrors the backend Message type. sentTimestamp is kept as a raw ISO-8601
-// string; images holds the URLs of any attachments (fetched separately).
 struct Message {
     String authorUid;
     String destinationPid;
     String authorName;
     String sentTimestamp;
     String messageText;
-    String images[PRINTIMATE_MAX_IMAGES_PER_MESSAGE];
+    Image  images[PRINTIMATE_MAX_IMAGES_PER_MESSAGE];
     int    imageCount = 0;
     bool   printed    = false;
 };
@@ -34,8 +42,8 @@ struct Printer {
     int  consecutiveErrors = 0;
 };
 
-// Initialise UART2 and the Adafruit_Thermal driver. Prints a startup banner
-// (MAC + IP) so the user knows the device is online. Call from onStateEntry(Ready).
+// Initialise UART2 and the Adafruit_Thermal driver.
+// Call from onStateEntry(Ready).
 void printer_begin(Printer &p);
 
 // HTTP GET to PRINTIMATE_API_BASE_URL/messages, parse JSON, and call

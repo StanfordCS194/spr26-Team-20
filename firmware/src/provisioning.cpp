@@ -44,6 +44,7 @@
 
 // ---- Module state -----------------------------------------------------------
 static volatile bool g_complete = false;
+static volatile bool g_prov_reset_pending = false; // true once we've triggered a reset for the current failure
 static char          g_serviceName[24] = {0};      // "PROV_XXXX"
 static char          g_pop[PRINTIMATE_POP_LEN + 1] = {0};
 
@@ -66,6 +67,7 @@ static void loadOrGeneratePoP();
 void provisioning_begin() {
     PRINTIMATE_LOG_I("Provisioning: starting BLE flow");
     g_complete = false;
+    g_prov_reset_pending = false;
 
     buildServiceName();
     loadOrGeneratePoP();
@@ -245,6 +247,9 @@ static void onWiFiProvEvent(arduino_event_t *event) {
             PRINTIMATE_LOG_I("Received credentials: SSID='%s'",
                              (const char*)info.ssid);
             #endif
+            // New credentials arriving — clear the reset flag so a
+            // subsequent failure triggers a fresh reset.
+            g_prov_reset_pending = false;
             break;
         }
 
@@ -255,7 +260,6 @@ static void onWiFiProvEvent(arduino_event_t *event) {
             } else {
                 PRINTIMATE_LOG_W("Provisioning failed: AP not found");
             }
-            // Stay in provisioning so the user can retry from the app.
             break;
         }
 
@@ -265,6 +269,20 @@ static void onWiFiProvEvent(arduino_event_t *event) {
 
         case ARDUINO_EVENT_PROV_END:
             PRINTIMATE_LOG_I("Provisioning manager ended");
+            break;
+
+        case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+            // ARDUINO_EVENT_PROV_CRED_FAIL often never fires because the
+            // provisioning manager retries indefinitely at the STA level.
+            // This event fires on every retry — reboot once on the first
+            // failure so BLE advertising comes back up and the app can
+            // reconnect and send corrected credentials.
+            if (!g_complete && !g_prov_reset_pending) {
+                g_prov_reset_pending = true;
+                PRINTIMATE_LOG_W("WiFi disconnect during provisioning — wiping credentials and rebooting for retry");
+                network_prov_mgr_reset_wifi_provisioning();
+                esp_restart();
+            }
             break;
 
         case ARDUINO_EVENT_WIFI_STA_GOT_IP:
