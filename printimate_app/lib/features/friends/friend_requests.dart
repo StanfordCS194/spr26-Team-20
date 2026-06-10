@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../app/config.dart';
+import '../../app/api.dart';
 // ---------------------------------------------------------------------------
 // Mock data
 // ---------------------------------------------------------------------------
@@ -102,21 +103,15 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    final res = await http.get(
-      Uri.parse('${Config.serverBaseUrl}/get-friend-requests?uid=${currentUser.uid}'),
-    );
-    if (res.statusCode != 200) return;
-
-    final List<dynamic> requests = jsonDecode(res.body)['requests'];
-    final List<_FriendRequest> loaded = [];
-
-    for (final entry in requests) {
-      final String pid = entry['pid'];
-      final List<String> uids = List<String>.from(entry['fromUid']);
-      for (final uid in uids) {
-        loaded.add(_FriendRequest(username: uid, uid: uid, printer_name: pid));
-      }
-    }
+    final results = await fetchFriendRequests(currentUser.uid);
+    
+    final List<_FriendRequest> loaded = results.map((entry) {
+    return _FriendRequest(
+        username: entry['requesterUid'] as String,
+        uid: entry['requesterUid'] as String,
+        printer_name: entry['pid'] as String,
+      );
+    }).toList();
 
     setState(() {
       _requests.clear();

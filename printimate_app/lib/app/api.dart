@@ -33,3 +33,36 @@ Future<bool> fetchPrinterExists(String pid) async {
 
   return doc.exists;
 }
+
+Future<List<Map<String, dynamic>>> fetchFriendRequests(String uid) async {
+  // Get the user's owned printers
+  final userDoc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .get();
+
+  if (!userDoc.exists) throw Exception('User not found');
+
+  final ownedPids = List<String>.from(userDoc.data()?['ownedPids'] ?? []);
+
+  if (ownedPids.isEmpty) return [];
+
+  // Fetch permission requests for each owned printer
+  final results = <Map<String, dynamic>>[];
+
+  for (final pid in ownedPids) {
+    final requestDoc = await FirebaseFirestore.instance
+        .collection('permissionRequests')
+        .doc(pid)
+        .get();
+
+    if (requestDoc.exists) {
+      final fromUids = List<String>.from(requestDoc.data()?['fromUid'] ?? []);
+      for (final requesterUid in fromUids) {
+        results.add({'pid': pid, 'requesterUid': requesterUid});
+      }
+    }
+  }
+
+  return results;
+}

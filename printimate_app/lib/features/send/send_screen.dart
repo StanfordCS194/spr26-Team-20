@@ -18,7 +18,6 @@ import '../onboarding/onboarding_state.dart';
 import 'drawing_canvas.dart';
 
 const int _printerWidthPx = 384;
-const String _defaultServerUrl = 'https://printimate-35d0d5bebe8d.herokuapp.com';
 
 enum _Source { text, photo, draw }
 
@@ -215,7 +214,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
       try {
         final response = await http.post(
-          Uri.parse('$_defaultServerUrl/send?pid=$destinationPid'),
+          Uri.parse('${Config.serverBaseUrl}/send?pid=$destinationPid'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'authorUid': user.uid,
