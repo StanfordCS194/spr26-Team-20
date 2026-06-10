@@ -104,10 +104,12 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.371888079966-jk2qo3j7rp16261uulo8lht6uvsb75ml</string>
+				<string>com.googleusercontent.apps.371888079966-r7ptj5uil2hjktfcauvvuhtgpmk88km5</string>
 			</array>
 		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>371888079966-r7ptj5uil2hjktfcauvvuhtgpmk88km5.apps.googleusercontent.com</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Used to find friends with receipt printers</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
