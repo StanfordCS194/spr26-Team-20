@@ -2,8 +2,6 @@
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -58,32 +56,6 @@ class _FriendingScreenState extends ConsumerState<FriendingScreen> {
     if (uid == null) return;
     final results = await fetchSentFriendRequests(uid);
     setState(() => _pendingRequests = results);
-  }
-
-  // This function is currently unused
-  // Previously Felipe was trying to load friends through contacts
-  // Now we want to search printers by pid instead
-  Future<void> _loadContacts() async {
-    if (kIsWeb ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.linux) {
-      setState(() { _notMobile = true; _loading = false; });
-      return;
-    }
-    final granted = await FlutterContacts.requestPermission(readonly: true);
-    if (!granted) {
-      setState(() { _permissionDenied = true; _loading = false; });
-      return;
-    }
-    final contacts = await FlutterContacts.getContacts(withProperties: false);
-    setState(() {
-      _suggestions = contacts
-          .map((c) => _Suggestion(c.id, c.displayName))
-          .where((s) => s.name.isNotEmpty)
-          .toList();
-      _loading = false;
-    });
   }
 
   // This function is currently unused
