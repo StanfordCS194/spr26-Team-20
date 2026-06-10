@@ -25,7 +25,11 @@ class OnboardingController extends Notifier<OnboardingState> {
   @override
   OnboardingState build() {
     final prefs = ref.read(appPreferencesProvider);
-    return OnboardingState(printerId: prefs.savedPrinterId);
+    // DEMO: default to the one working printer ('printer1') so users are never
+    // force-routed into the BLE provisioning flow. Revert this fallback once
+    // provisioning is demo-ready. See onboarding/provisioning skip notes.
+    final saved = prefs.savedPrinterId;
+    return OnboardingState(printerId: saved.isEmpty ? 'printer1' : saved);
   }
 
   void setName(String v) => state = state.copyWith(name: v);
