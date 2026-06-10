@@ -78,7 +78,7 @@ app.post("/send", (req, res) => {
 
   console.log(`Received request to send message to pid ${pid} with body:`, body);
 
-  if (!pid || !body.authorUid) {
+  if (!pid || !body.authorUid || body.messageText == null) {
     res
       .status(400)
       .send("Missing required fields: pid, authorUid, messageText");
