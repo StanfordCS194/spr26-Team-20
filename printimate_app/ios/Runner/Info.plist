@@ -114,5 +114,9 @@
 	<string>Used to find friends with receipt printers</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Disable Impeller: its offscreen Picture.toImage() doesn't rasterize text
+	     glyphs, so rendered-text receipt bitmaps came out all-white. Skia works. -->
+	<key>FLTEnableImpeller</key>
+	<false/>
 </dict>
 </plist>
