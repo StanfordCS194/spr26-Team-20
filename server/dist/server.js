@@ -2,22 +2,22 @@
 import express from "express";
 import cors from "cors";
 import { networkInterfaces } from "node:os";
-import { readFileSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { Collections, PrinterFields } from "./database_names.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const envDir = join(__dirname, "env");
-const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
-const envFile = envFiles[0];
-if (!envFile) {
-    throw new Error("No JSON files found in env directory");
-}
-const serviceAccountPath = join(envDir, envFile);
-const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
+// const envDir = join(__dirname, "env");
+// const envFiles = readdirSync(envDir).filter(file => file.endsWith('.json'));
+// const envFile = envFiles[0];
+// if (!envFile) {
+//   throw new Error("No JSON files found in env directory");
+// }
+// const serviceAccountPath = join(envDir, envFile);
+// const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf-8"));
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 const adminApp = initializeApp({
     credential: cert(serviceAccount),
 });
