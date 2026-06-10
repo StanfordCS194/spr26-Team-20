@@ -35,7 +35,6 @@ app.post("/send", (req, res) => {
     const pid = req.query.pid;
     const body = req.body;
     console.log(`Received request to send message to pid ${pid} with body:`, body);
-    // Niklas's modification
     if (!pid || !body.authorUid || body.messageText == null) {
         res
             .status(400)
@@ -175,6 +174,10 @@ app.post("/send-permission-request", async (req, res) => {
         var currentData = currentRequests.data();
         if (currentData) {
             requestList = currentData.fromUid;
+            if (requestList.includes(uid)) {
+                res.status(409).send("You already sent a request for this printer.");
+                return;
+            }
             requestList.push(uid);
         }
     }

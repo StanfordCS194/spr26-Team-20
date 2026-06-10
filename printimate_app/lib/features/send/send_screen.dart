@@ -5,17 +5,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 
+import '../../app/config.dart';
 import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
 import 'drawing_canvas.dart';
 
 const int _printerWidthPx = 384;
-const String _defaultServerUrl = 'http://10.29.35.15:3000';
 
 enum _Source { text, photo, draw }
 
@@ -31,7 +33,8 @@ enum _TextSize {
 }
 
 class SendScreen extends ConsumerStatefulWidget {
-  const SendScreen({super.key});
+  final String printerName;
+  const SendScreen({super.key, required this.printerName});
 
   @override
   ConsumerState<SendScreen> createState() => _SendScreenState();
@@ -53,7 +56,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   String _sendStatus = '';
   String? _error;
   String? _info;
-  String _serverUrl = _defaultServerUrl;
 
   _TextSize _textSize = _TextSize.medium;
   bool _textBold = false;
@@ -62,25 +64,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchServerUrl();
-  }
-
-  Future<void> _fetchServerUrl() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_defaultServerUrl/server-info'),
-      ).timeout(const Duration(seconds: 2));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          _serverUrl = data['primaryUrl'] ?? _defaultServerUrl;
-        });
-      }
-    } catch (e) {
-      // Fall back to default if fetch fails
-      debugPrint('Failed to fetch server URL: $e');
-    }
+    _printerIdCtl.text = widget.printerName;
   }
 
   @override
@@ -259,7 +243,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 
       try {
         final response = await http.post(
-          Uri.parse('$_serverUrl/send?pid=$destinationPid'),
+          Uri.parse('${Config.serverBaseUrl}/send?pid=$destinationPid'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'authorUid': user.uid,
@@ -356,20 +340,31 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   }
 
   Widget _buildPrinterSelector(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('PRINTER ID', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _printerIdCtl,
-          decoration: const InputDecoration(
-            hintText: 'Enter printer ID...',
-          ),
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('PRINTER', style: Theme.of(context).textTheme.labelLarge),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: PrintimateColors.border),
         ),
-      ],
-    );
-  }
+        child: Row(
+          children: [
+            const Icon(Icons.print_outlined,
+                size: 16, color: PrintimateColors.textDim),
+            const SizedBox(width: 10),
+            Text(
+              widget.printerName,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
 
   Widget _buildText(BuildContext context) {
     return Column(

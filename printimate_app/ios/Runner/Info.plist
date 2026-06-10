@@ -87,5 +87,28 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Printimate uses Bluetooth to set up your thermal printer on WiFi.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Printimate uses Bluetooth to set up your thermal printer on WiFi.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Printimate uses the camera to scan printer pairing QR codes and attach photos to messages.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Printimate accesses your photo library so you can send pictures to loved ones.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Printimate can talk to your printer over your local WiFi network.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.371888079966-jk2qo3j7rp16261uulo8lht6uvsb75ml</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSContactsUsageDescription</key>
+	<string>Used to find friends with receipt printers</string>
 </dict>
 </plist>

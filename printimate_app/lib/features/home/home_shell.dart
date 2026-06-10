@@ -6,6 +6,7 @@ import '../../app/theme.dart';
 import '../history/history_screen.dart';
 import '../profile/profile_screen.dart';
 import '../send/send_screen.dart';
+import '../send/printers_list_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, this.initialIndex = 1});
@@ -21,6 +22,7 @@ class _HomeShellState extends State<HomeShell> {
   late final PageController _controller =
       PageController(initialPage: widget.initialIndex);
   late int _index = widget.initialIndex;
+  String? _selectedPrinter;
 
   @override
   void dispose() {
@@ -30,6 +32,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _onTabTap(int i) {
     if (i == _index) return;
+    setState(() => _selectedPrinter = null);
     _controller.animateToPage(
       i,
       duration: const Duration(milliseconds: 220),
@@ -50,8 +53,17 @@ class _HomeShellState extends State<HomeShell> {
               child: Row(
                 children: [
                   const SizedBox(width: 16),
+                  if (_selectedPrinter != null && _index == 1)
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: PrintimateColors.text),
+                      onPressed: () => setState(() => _selectedPrinter = null),
+                    )
+                  else
+                    const SizedBox(width: 16),
                   Text(
-                    _tabs[_index],
+                    _selectedPrinter != null && _index == 1
+                        ? _selectedPrinter!
+                        : _tabs[_index],
                     style: const TextStyle(
                       fontFamily: 'Courier',
                       color: PrintimateColors.textDim,
@@ -61,12 +73,20 @@ class _HomeShellState extends State<HomeShell> {
                   ),
                   const Spacer(),
                   Tooltip(
-                    message: 'Add another printer',
+                    message: 'Friend Requests',
                     child: IconButton(
-                      icon: const Icon(Icons.add, color: PrintimateColors.text),
-                      onPressed: () => context.push('/provisioning'),
+                      icon: const Icon(Icons.favorite_border, color: PrintimateColors.text),
+                      onPressed: () => context.push('/friend_requests'),
                     ),
                   ),
+                  // TODO: implement notifications and re-enable this button.
+                  // Tooltip(
+                  //   message: 'Notifications',
+                  //   child: IconButton(
+                  //     icon: const Icon(Icons.notifications_outlined, color: PrintimateColors.text),
+                  //     onPressed: () => context.push('/notifications'),
+                  //   ),
+                  // ),
                 ],
               ),
             ),
@@ -77,11 +97,19 @@ class _HomeShellState extends State<HomeShell> {
                 child: PageView(
                   controller: _controller,
                   physics: const ClampingScrollPhysics(),
-                  onPageChanged: (i) => setState(() => _index = i),
-                  children: const [
-                    HistoryScreen(),
-                    SendScreen(),
-                    ProfileScreen(),
+                  onPageChanged: (i) => setState(() {
+                    _index = i;
+                    _selectedPrinter = null;
+                  }),
+                  children: [
+                      const HistoryScreen(),
+                      _selectedPrinter != null
+                          ? SendScreen(printerName: _selectedPrinter!)
+                          : PrintersListScreen(
+                              onPrinterSelected: (pid) =>
+                                  setState(() => _selectedPrinter = pid),
+                          ),
+                      const ProfileScreen(),
                   ],
                 ),
               ),

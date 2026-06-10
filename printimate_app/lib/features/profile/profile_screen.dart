@@ -60,6 +60,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (mounted) setState(() => _error = 'Could not save name: $e');
     }
   }
+  Future<void> _editUsername(String current) async {
+    final controller = TextEditingController(text: current);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: PrintimateColors.surface,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text('EDIT USERNAME', style: Theme.of(context).textTheme.titleLarge),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Your username'),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('CANCEL',
+                style: TextStyle(color: PrintimateColors.textDim)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('SAVE',
+                style: TextStyle(color: PrintimateColors.text)),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    final trimmed = result.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      await ref.read(profileRepositoryProvider).updateUsername(trimmed);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not save username: $e');
+    }
+  }
 
   Future<void> _changePhoto() async {
     setState(() => _error = null);
@@ -128,6 +165,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         builder: (context, snapshot) {
           final data = snapshot.data?.data() ?? const <String, dynamic>{};
           final displayName = (data['displayName'] as String?) ?? '';
+          final username = (data['username'] as String?) ?? '';
           final email = data['email'] as String?;
           final phone = data['phoneNumber'] as String?;
           final photoUrl = data['photoURL'] as String?;
@@ -157,6 +195,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   label: 'NAME',
                   value: displayName.isEmpty ? '—' : displayName,
                   onEdit: () => _editName(displayName),
+                ),
+                _Field(
+                  label: 'USERNAME',
+                  value: username.isEmpty ? '—' : '@$username',
+                  onEdit: () => _editUsername(username),
                 ),
                 _Field(
                   label: 'EMAIL',

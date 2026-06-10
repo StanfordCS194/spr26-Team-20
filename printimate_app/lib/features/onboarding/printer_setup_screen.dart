@@ -73,6 +73,11 @@ class _PrinterSetupScreenState extends ConsumerState<PrinterSetupScreen> {
             onPressed: canContinue ? _connect : null,
             child: const Text('📡  CONNECT PRINTER'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () => context.go('/onboarding/add_friends_screen'),
+            child: const Text("I DON'T HAVE A PRINTER"),
+          ),
         ],
       ),
     );

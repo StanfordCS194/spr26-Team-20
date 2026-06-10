@@ -31,7 +31,8 @@ class _AddFriendsScreenState extends ConsumerState<AddFriendsScreen> {
 
   void _finish() {
     ref.read(onboardingProvider.notifier).setFriends(_selected.toList());
-    context.go('/');
+    ref.read(onboardingProvider.notifier).complete();
+    context.go('/home');
   }
 
   @override

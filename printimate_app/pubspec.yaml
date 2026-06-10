@@ -59,6 +59,7 @@ dependencies:
   shared_preferences: ^2.3.2
   http: ^1.2.0
   flutter_esp_ble_prov: ^0.1.7
+  flutter_contacts: ^1.1.7
 
 dev_dependencies:
   flutter_test:

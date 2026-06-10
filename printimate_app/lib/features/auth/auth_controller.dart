@@ -18,6 +18,7 @@ class AuthController {
   AuthController(this._auth, this._profiles);
   final FirebaseAuth _auth;
   final UserProfileRepository _profiles;
+  User? get currentUser => _auth.currentUser;
 
   Future<User> signUpWithEmail({
     required String email,
