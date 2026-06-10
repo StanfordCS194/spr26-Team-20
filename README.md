@@ -64,3 +64,7 @@ printer1
 ```bash
 printer2
 ```
+
+## RUNNING SERVER guidelines
+1. Download the .json from printimate firebase 
+2. heroku config:set FIREBASE_SERVICE_ACCOUNT="$(cat server/env/*.json)" --app printimate
