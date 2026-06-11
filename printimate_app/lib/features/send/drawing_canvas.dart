@@ -1,8 +1,8 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:image/image.dart' as img;
 
 import '../../app/theme.dart';
 
@@ -62,16 +62,55 @@ class DrawingCanvas extends StatefulWidget {
 class DrawingCanvasState extends State<DrawingCanvas> {
   final GlobalKey _boundaryKey = GlobalKey();
 
-  Future<Uint8List?> exportPng({int targetWidth = 384}) async {
+  /// Rasterizes the strokes to a black-on-white PNG.
+  ///
+  /// Done on the CPU with the `image` package rather than a GPU
+  /// `RenderRepaintBoundary.toImage()` readback, because on real iOS devices
+  /// (Impeller) that readback comes back blank — it only worked on the
+  /// simulator/Android/web (Skia). This path is renderer-independent.
+  Uint8List? exportPng({int targetWidth = 384}) {
     final boundary = _boundaryKey.currentContext?.findRenderObject()
         as RenderRepaintBoundary?;
     if (boundary == null) return null;
-    final logicalWidth = boundary.size.width;
-    if (logicalWidth == 0) return null;
-    final pixelRatio = targetWidth / logicalWidth;
-    final image = await boundary.toImage(pixelRatio: pixelRatio);
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    return data?.buffer.asUint8List();
+    final size = boundary.size;
+    if (size.width == 0) return null;
+
+    final scale = targetWidth / size.width;
+    final w = targetWidth;
+    final h = (size.height * scale).round().clamp(1, 4000);
+
+    final image = img.Image(width: w, height: h);
+    img.fill(image, color: img.ColorRgb8(255, 255, 255));
+    final black = img.ColorRgb8(0, 0, 0);
+    final thickness = (3.0 * scale).round().clamp(1, 24);
+
+    for (final stroke in widget.controller.strokes) {
+      final pts = stroke.points;
+      if (pts.isEmpty) continue;
+      if (pts.length == 1) {
+        img.fillCircle(
+          image,
+          x: (pts.first.dx * scale).round(),
+          y: (pts.first.dy * scale).round(),
+          radius: (thickness / 2).ceil(),
+          color: black,
+        );
+        continue;
+      }
+      for (var i = 1; i < pts.length; i++) {
+        img.drawLine(
+          image,
+          x1: (pts[i - 1].dx * scale).round(),
+          y1: (pts[i - 1].dy * scale).round(),
+          x2: (pts[i].dx * scale).round(),
+          y2: (pts[i].dy * scale).round(),
+          color: black,
+          thickness: thickness,
+          antialias: true,
+        );
+      }
+    }
+    return Uint8List.fromList(img.encodePng(image));
   }
 
   @override

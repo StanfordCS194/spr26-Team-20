@@ -16,6 +16,7 @@ import '../../app/config.dart';
 import '../../app/theme.dart';
 import '../onboarding/onboarding_state.dart';
 import 'drawing_canvas.dart';
+import 'draw_screen.dart';
 
 const int _printerWidthPx = 384;
 
@@ -45,7 +46,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   final _printerIdCtl = TextEditingController();
   final _picker = ImagePicker();
   final _drawingController = DrawingController();
-  final GlobalKey<DrawingCanvasState> _canvasKey = GlobalKey();
 
   _Source _source = _Source.text;
   Uint8List? _previewBytes;
@@ -76,6 +76,13 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   }
 
   void _setSource(_Source s) {
+    // Drawing is its own full-screen page (so the canvas gesture isn't stolen
+    // by the page scroll / tab PageView). It sends itself; afterwards we land
+    // back on the Text tab.
+    if (s == _Source.draw) {
+      _openDrawScreen();
+      return;
+    }
     if (s == _source) return;
     setState(() {
       _source = s;
@@ -84,6 +91,22 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       _info = null;
       _error = null;
     });
+  }
+
+  Future<void> _openDrawScreen() async {
+    final pid = _printerIdCtl.text.trim().isNotEmpty
+        ? _printerIdCtl.text.trim()
+        : ref.read(onboardingProvider).printerId.trim();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => DrawScreen(
+          controller: _drawingController,
+          destinationPid: pid.isEmpty ? 'printer1' : pid,
+        ),
+      ),
+    );
+    if (mounted) setState(() => _source = _Source.text);
   }
 
   Future<void> _pickImage() async {
@@ -143,17 +166,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     });
   }
 
-  Future<Uint8List?> _captureDrawingRaw() async {
-    final state = _canvasKey.currentState;
-    if (state == null) return null;
-    final png = await state.exportPng(targetWidth: _printerWidthPx);
-    if (png == null) return null;
-    final decoded = img.decodeImage(png);
-    if (decoded == null) return null;
-    // Canvas is white-on-black for visual contrast; printer needs black-on-white.
-    final inverted = img.invert(decoded);
-    return Uint8List.fromList(img.encodePng(inverted));
-  }
 
   Future<void> _send() async {
     setState(() {
@@ -221,17 +233,8 @@ class _SendScreenState extends ConsumerState<SendScreen> {
           );
           return;
         case _Source.draw:
-          if (_drawingController.isEmpty) {
-            setState(() => _error = 'Draw something first.');
-            return;
-          }
-          final drawing = await _captureDrawingRaw();
-          if (drawing == null) {
-            setState(() => _error = 'Could not capture drawing.');
-            return;
-          }
-          rawForPipeline = drawing;
-          break;
+          // Drawing is sent from its own full-screen page, never here.
+          return;
       }
 
       setState(() => _sendStatus = 'PROCESSING IMAGE...');
@@ -318,7 +321,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 const SizedBox(height: 24),
                 if (_source == _Source.text) _buildText(context),
                 if (_source == _Source.photo) _buildPhoto(context),
-                if (_source == _Source.draw) _buildDraw(context),
                 const SizedBox(height: 24),
                 if (_error != null) ...[
                   Text(_error!,
@@ -431,27 +433,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     );
   }
 
-  Widget _buildDraw(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('DRAW', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: PrintimateColors.border),
-          ),
-          child: DrawingCanvas(
-            key: _canvasKey,
-            controller: _drawingController,
-            aspectRatio: 1.0,
-          ),
-        ),
-        const SizedBox(height: 12),
-        DrawingToolbar(controller: _drawingController),
-      ],
-    );
-  }
 }
 
 class _SendingOverlay extends StatelessWidget {
@@ -566,7 +547,12 @@ class _ImagePreview extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          Image.memory(bytes, fit: BoxFit.contain),
+          // Cap the preview height so a tall photo doesn't push the SEND button
+          // far off-screen.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 280),
+            child: Image.memory(bytes, fit: BoxFit.contain),
+          ),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
